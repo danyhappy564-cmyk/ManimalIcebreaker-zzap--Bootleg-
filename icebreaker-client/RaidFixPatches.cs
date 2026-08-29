@@ -105,6 +105,18 @@ namespace Manimal.Icebreaker
             => __exception == null || IceGate.On ? null : __exception;
     }
 
+    // BREATHING effector NREs (08-29 field report: repeated NullReferenceException in
+    // Player.LateUpdate via ProceduralWeaponAnimation.ProcessEffectors, popping EFT's own
+    // error dialog on raid load) — same family, same story as MotionEffector/GClass908
+    // above: a required field this effector expects isn't set up on our non-standard
+    // camera/player rig, throwing every LateUpdate until the raid ends.
+    [HarmonyPatch(typeof(EFT.Animations.BreathEffector), nameof(EFT.Animations.BreathEffector.Process))]
+    internal static class Patch_BreathEffectorNeverThrows
+    {
+        private static Exception Finalizer(Exception __exception)
+            => __exception == null || IceGate.On ? null : __exception;
+    }
+
     // stutter forensics companion: bots path via SYNCHRONOUS NavMesh.CalculatePath on the
     // main thread — several repaths landing in one frame on a big navmesh is the classic
     // unattributed 30-60ms hitch. count + time every call so spike lines can name it.
