@@ -4529,15 +4529,12 @@ namespace Manimal.Icebreaker
             if (!IceGate.On) return true; // vanilla maps: BSG's original behavior
             var b = __instance;
             int failed = 0;
-            bool lastStepFailed = false;
             void Step(string name, Action a)
             {
-                lastStepFailed = false;
                 try { a(); }
                 catch (Exception e)
                 {
                     failed++;
-                    lastStepFailed = true;
                     Plugin.Log.LogError($"[BotWitness] '{b.name}' step {name} FAILED: {e}");
                 }
             }

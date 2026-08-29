@@ -317,8 +317,11 @@ namespace Manimal.Icebreaker
             var scat = AccessTools.Field(typeof(EFT.Weather.WeatherController), "tod_Scattering_0")?.GetValue(wc) as TOD_Scattering;
             bool dateReady = false;
             try { dateReady = GClass4.Instance?.CurrentTime?.GameDateTime != null; } catch { }
-            if (false) // MBOIT dead end — no WindowsManager on this map; VolumetricFog&Mist2 carries the fog now
-            {
+            // MBOIT dead end — no WindowsManager on this map; VolumetricFog&Mist2 carries
+            // the fog now. Kept as a preprocessor-disabled block rather than deleted: 0.16.9
+            // never uses this path only because no remap assets exist in its files, the
+            // code+shaders are all present, so flip this to `#if true` if that ever changes.
+#if false
                 wc.MBOITFogRemapData = null; // v1 stays dead — only junk ever lived there
                 if (wc.MBOITFogRemapDataV2 == null || wc.MBOITFogRemapDataV2.name != "manimal_fog_remap")
                 {
@@ -361,8 +364,7 @@ namespace Manimal.Icebreaker
                     else
                         Plugin.Log.LogDebug($"[Weather] MBOIT_Scattering bound ok (enabled={mb.enabled})");
                 }
-            }
-            else
+#else
             {
                 // fallback = the proven plain-fog path
                 wc.MBOITFogRemapDataV2 = null;
@@ -373,6 +375,7 @@ namespace Manimal.Icebreaker
                     Plugin.Log.LogWarning("[Weather] MBOIT disarmed (VolumetricFog off or date not ready)");
                 }
             }
+#endif
             // FOG, decoupled from the sky: TOD_Scattering fogs toward the night sky's
             // scattering color (= black -> eats the lamps). GlobalFog is the same
             // depth-based screen fog but blends toward RenderSettings.fogColor — OUR
