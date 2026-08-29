@@ -669,6 +669,16 @@ namespace Manimal.Icebreaker
                 }
                 if (!AliveBoss()) return;
 
+                // (08-30 field report: Wedge only reacts to dead-center forward vision,
+                // never to a hit/stab from behind — narrower than either full SAIN
+                // perception or bare vanilla should behave.) one-shot diagnostic so the
+                // NEXT field log says what's actually driving him, instead of guessing
+                // again: his real brain name, which BigBrain layer currently owns him,
+                // and whether SAIN even attached its own component to this WildSpawnType
+                // at all (a modded boss type SAIN doesn't recognize runs on vanilla
+                // perception only, which is a plausible match for this symptom).
+                if (!_diagLogged) LogWedgeDiag();
+
                 // the blood-ambush trigger rides the boss's own hit event — keep the
                 // subscription pinned to whoever the live boss player currently is
                 EnsureHitSub();
@@ -699,6 +709,31 @@ namespace Manimal.Icebreaker
             }
             catch { }
             finally { RenderEnvProbe.AddTick(RenderEnvProbe.TickWedgeVoice, _updSw.Elapsed.TotalMilliseconds); }
+        }
+
+        private bool _diagLogged;
+
+        private void LogWedgeDiag()
+        {
+            _diagLogged = true;
+            try
+            {
+                string brainName = null;
+                try { brainName = _boss.Brain?.BaseBrain?.ShortName(); } catch { }
+                string activeLayer = null;
+                try { activeLayer = DrakiaXYZ.BigBrain.Brains.BrainManager.GetActiveLayerName(_boss); } catch { }
+                bool hasSain = false;
+                try
+                {
+                    var sainType = AccessTools.TypeByName("SAIN.Components.BotComponent");
+                    var go = _boss.GetPlayer?.gameObject;
+                    hasSain = sainType != null && go != null && go.GetComponent(sainType) != null;
+                }
+                catch { }
+                Plugin.Log.LogWarning($"[WedgeBrain] DIAG boss='{_boss.name}' role={_boss.Profile?.Info?.Settings?.Role} "
+                    + $"brain='{brainName}' activeLayer='{activeLayer}' sainComponentAttached={hasSain}");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[WedgeBrain] diag failed: {e.Message}"); }
         }
 
         private bool AliveBoss()
