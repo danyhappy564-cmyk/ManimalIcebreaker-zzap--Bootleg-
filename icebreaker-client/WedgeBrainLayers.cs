@@ -677,7 +677,7 @@ namespace Manimal.Icebreaker
                 // and whether SAIN even attached its own component to this WildSpawnType
                 // at all (a modded boss type SAIN doesn't recognize runs on vanilla
                 // perception only, which is a plausible match for this symptom).
-                if (!_diagLogged) LogWedgeDiag();
+                if (!_diagLogged) { _diagLogged = true; LogWedgeDiag("FOUND"); }
 
                 // the blood-ambush trigger rides the boss's own hit event — keep the
                 // subscription pinned to whoever the live boss player currently is
@@ -713,9 +713,13 @@ namespace Manimal.Icebreaker
 
         private bool _diagLogged;
 
-        private void LogWedgeDiag()
+        // includes the enemy-memory state now, not just brain/layer identity — the
+        // find-time-only snapshot showed SAIN properly attached and running a real
+        // combat layer, but that was likely well before the actual non-reaction moment;
+        // GoalEnemy/IsVisible/IsUnderFire is what tells us whether he even KNOWS he's
+        // being hit, versus knowing and just not acting on it (two very different bugs).
+        private void LogWedgeDiag(string tag)
         {
-            _diagLogged = true;
             try
             {
                 string brainName = null;
@@ -730,8 +734,18 @@ namespace Manimal.Icebreaker
                     hasSain = sainType != null && go != null && go.GetComponent(sainType) != null;
                 }
                 catch { }
-                Plugin.Log.LogWarning($"[WedgeBrain] DIAG boss='{_boss.name}' role={_boss.Profile?.Info?.Settings?.Role} "
-                    + $"brain='{brainName}' activeLayer='{activeLayer}' sainComponentAttached={hasSain}");
+                string enemy = "none";
+                bool underFire = false;
+                try
+                {
+                    var ge = _boss.Memory?.GoalEnemy;
+                    underFire = _boss.Memory?.IsUnderFire ?? false;
+                    enemy = ge == null ? "none" : $"visible={ge.IsVisible}";
+                }
+                catch { }
+                Plugin.Log.LogWarning($"[WedgeBrain] DIAG[{tag}] boss='{_boss.name}' role={_boss.Profile?.Info?.Settings?.Role} "
+                    + $"brain='{brainName}' activeLayer='{activeLayer}' sainComponentAttached={hasSain} "
+                    + $"goalEnemy={enemy} isUnderFire={underFire}");
             }
             catch (Exception e) { Plugin.Log.LogWarning($"[WedgeBrain] diag failed: {e.Message}"); }
         }
@@ -761,7 +775,21 @@ namespace Manimal.Icebreaker
             _hitSub = null;
         }
 
-        private void OnBossHit(DamageInfoStruct damage, EBodyPart part, float hp) => WedgeAmbush.NoteHit();
+        private void OnBossHit(DamageInfoStruct damage, EBodyPart part, float hp)
+        {
+            WedgeAmbush.NoteHit();
+            // (08-30: the find-time snapshot showed SAIN properly attached and running a
+            // real combat layer, but that was likely well before the "shot/stabbed and
+            // never reacts" moment the field report describes — this only tells us
+            // anything if it fires AT that moment.) throttled so a burst of hits from one
+            // mag dump doesn't spam the log.
+            if (Time.time >= _nextHitDiag)
+            {
+                _nextHitDiag = Time.time + 2f;
+                LogWedgeDiag($"HIT part={part} dmg={damage.Damage:0}");
+            }
+        }
+        private float _nextHitDiag;
 
         private void OnDestroy() => Unsub();
 
