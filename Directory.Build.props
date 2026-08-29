@@ -5,7 +5,10 @@
     <ModGuid>com.manimal.icebreaker</ModGuid>
     <ModUsername>Manimal</ModUsername>
     <ModDisplayName>Icebreaker</ModDisplayName>
-    <SPTPath>E:\SPT 4.0.10</SPTPath>
-    <FikaPath>D:\SPTDevFika</FikaPath>
+    <!-- overridable per-machine with -p:SPTPath=... / -p:FikaPath=... (or matching
+         environment variables) — these were unconditional (not just defaults) before,
+         so a caller's command-line value was silently discarded -->
+    <SPTPath Condition="'$(SPTPath)' == ''">E:\SPT 4.0.10</SPTPath>
+    <FikaPath Condition="'$(FikaPath)' == ''">D:\SPTDevFika</FikaPath>
   </PropertyGroup>
 </Project>
