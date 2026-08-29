@@ -159,14 +159,25 @@ namespace Manimal.Icebreaker
         // unregister + ReturnToPool on the GO. no death, no ragdoll, no loot. trims the
         // max-spawned wave crew down to the raid's rolled size. farthest-from-player
         // first, and nobody within 60m — a rogue vanishing in view would look broken.
+        // (08-29 field report: this and C3KeycardSweep below showed up as recurring
+        // stutter spikes — up to ~55ms — on the profiler.) FindObjectsOfType<BotOwner>()
+        // is a full scene scan; GameWorld.AllAlivePlayersList is the SAME list the game
+        // itself already maintains incrementally on spawn/death (WedgeVoice's boss/
+        // squad-death watchers use it for exactly this reason), so walking it instead
+        // costs nothing beyond the alive-player count rather than a scene-wide search.
         private static List<BotOwner> AliveRogues()
         {
             var list = new List<BotOwner>();
-            foreach (var b in UnityEngine.Object.FindObjectsOfType<BotOwner>())
-                if (b != null && b.Profile?.Info?.Settings?.Role == WildSpawnType.exUsec
-                    && b.GetPlayer != null && b.GetPlayer.HealthController != null
-                    && b.GetPlayer.HealthController.IsAlive)
-                    list.Add(b);
+            var all = Singleton<GameWorld>.Instance?.AllAlivePlayersList;
+            if (all == null) return list;
+            foreach (var pl in all)
+            {
+                if (pl == null || !pl.AIData.IsAI) continue;
+                if (pl.Profile?.Info?.Settings?.Role != WildSpawnType.exUsec) continue;
+                if (pl.HealthController == null || !pl.HealthController.IsAlive) continue;
+                var b = pl.AIData.BotOwner;
+                if (b != null) list.Add(b);
+            }
             return list;
         }
 
@@ -702,16 +713,23 @@ namespace Manimal.Icebreaker
             float until = Time.time + 300f;
             while (Time.time < until)
             {
-                foreach (var b in UnityEngine.Object.FindObjectsOfType<BotOwner>())
-                {
-                    if (b == null || b.Profile?.Info?.Settings?.Role != WildSpawnType.exUsec) continue;
-                    var pid = b.Profile?.Id;
-                    if (string.IsNullOrEmpty(pid) || !_c3Rolled.Add(pid)) continue;
-                    var p = b.GetPlayer;
-                    if (p == null || p.HealthController == null || !p.HealthController.IsAlive) continue;
-                    if (UnityEngine.Random.Range(0f, 100f) < C3ChancePercent && StuffItem(b, C3KeycardTpl, "C-3 keycard"))
-                        Plugin.Log.LogInfo($"[Crew] C-3 keycard placed on rogue '{b.name}' — rare find, go loot him");
-                }
+                // AllAlivePlayersList instead of FindObjectsOfType<BotOwner>() — same
+                // reasoning as AliveRogues() above (08-29: this sweep firing every 5s for
+                // 5 minutes off a full scene scan was a recurring profiler stutter spike)
+                var all = Singleton<GameWorld>.Instance?.AllAlivePlayersList;
+                if (all != null)
+                    foreach (var pl in all)
+                    {
+                        if (pl == null || !pl.AIData.IsAI) continue;
+                        if (pl.Profile?.Info?.Settings?.Role != WildSpawnType.exUsec) continue;
+                        var pid = pl.Profile?.Id;
+                        if (string.IsNullOrEmpty(pid) || !_c3Rolled.Add(pid)) continue;
+                        if (pl.HealthController == null || !pl.HealthController.IsAlive) continue;
+                        var b = pl.AIData.BotOwner;
+                        if (b == null) continue;
+                        if (UnityEngine.Random.Range(0f, 100f) < C3ChancePercent && StuffItem(b, C3KeycardTpl, "C-3 keycard"))
+                            Plugin.Log.LogInfo($"[Crew] C-3 keycard placed on rogue '{b.name}' — rare find, go loot him");
+                    }
                 yield return new WaitForSeconds(5f);
             }
         }
