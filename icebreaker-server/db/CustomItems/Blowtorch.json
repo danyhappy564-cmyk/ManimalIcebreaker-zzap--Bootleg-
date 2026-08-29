@@ -13,6 +13,7 @@
       "InsuranceDisabled": false,
       "IsSpecialSlotOnly": false,
       "MaximumNumberOfUsage": 0,
+      "Prefab": { "path": "manimal/torch_container.bundle", "rcid": "" },
       "UsePrefab": { "path": "manimal/torch_container.bundle", "rcid": "" }
     },
     "locales": {
