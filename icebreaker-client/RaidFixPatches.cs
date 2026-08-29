@@ -706,6 +706,18 @@ namespace Manimal.Icebreaker
             try { var w = Comfort.Common.Singleton<GameWorld>.Instance; onIce = w != null && string.Equals(w.LocationId, "Suburbs", StringComparison.OrdinalIgnoreCase); } catch { }
             if (!onIce)
             {
+                _offIceStreak++;
+                // still inside the debounce window - treat this frame as on-ice anyway so a
+                // single bad read can't zero the staged-init counters below or fall through
+                // to the off-ice branch mid-raid
+                if (_offIceStreak < OffIceDebounceFrames) onIce = true;
+            }
+            else
+            {
+                _offIceStreak = 0;
+            }
+            if (!onIce)
+            {
                 // GIVE THE ENGINE ITS SETTINGS BACK (08-18 field report: "after i run
                 // icebreaker i have to restart my game to get render distance back").
                 // QualitySettings is GLOBAL engine state — it survives scene unload, and
@@ -2961,6 +2973,17 @@ namespace Manimal.Icebreaker
         private static int _maxLodOrig = -1;
         private static bool _qsLogged;
         private static bool _lodProbeOff;
+
+        // debounce for the onIce read below (08-29 field report: StageTwoInit fired 12x
+        // in one raid — each restart re-ran IcebreakerSnowGusts.Spawn() with no guard of
+        // its own, stacking a fresh gust particle system every time until it ate 90%+ of
+        // the frame). Comfort.Common.Singleton<GameWorld>.Instance is a plain field read,
+        // not guaranteed atomic-stable under the exact frame-hitch conditions this bug
+        // itself causes - a single misread of onIce=false mid-raid was enough to zero
+        // _iceFrames/_autoRebindStage and restart the whole staged init. Require the
+        // "off ice" reading to hold for several real frames before acting on it.
+        private const int OffIceDebounceFrames = 30;
+        private static int _offIceStreak;
 
         // The off-ice branch below used to redo two chunks of work on EVERY frame of
         // EVERY non-Icebreaker raid, forever - measured by ModProfiler as real
