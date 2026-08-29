@@ -247,11 +247,18 @@ namespace Manimal.Icebreaker
             return index;
         }
 
+        // (08-29 field report: a 17.9s single frame at raid start, traced to this walk.)
+        // a fresh Dictionary<string,int> was allocated on EVERY node just to disambiguate
+        // same-named SIBLINGS under it — including every leaf, which is most of a map
+        // this size (172k+ renderers alone). skip the allocation entirely for childless
+        // nodes; presize it for the rest so it doesn't grow-and-rehash while walking.
         private static void Walk(Transform t, string path, Dictionary<string, Transform> index)
         {
             index[path] = t;
-            var seen = new Dictionary<string, int>();
-            for (int i = 0; i < t.childCount; i++)
+            int n = t.childCount;
+            if (n == 0) return;
+            var seen = new Dictionary<string, int>(n);
+            for (int i = 0; i < n; i++)
             {
                 var c = t.GetChild(i);
                 seen.TryGetValue(c.name, out var k);
