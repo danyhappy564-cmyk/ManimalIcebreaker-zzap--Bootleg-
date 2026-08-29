@@ -702,19 +702,26 @@ namespace Manimal.Icebreaker
                 catch (Exception e) { Plugin.Log.LogWarning($"[LodProbe] failed: {e.Message}"); }
             }
 
+            // debounce only covers the case we genuinely CAN'T tell (GameWorld not resolved
+            // yet - a real gap during scene transition where a still-on-ice raid reads as
+            // "off" for a frame or two). once GameWorld resolves, its LocationId is
+            // authoritative and must apply immediately: forcing onIce=true for 30 frames on
+            // every map read (08-29: this ran the whole tick chain - including camera/graft
+            // ticks - against a persisted Icebreaker camera the instant Woods loaded next,
+            // both desaturating Woods and corrupting _iceFrames/_autoRebindStage for the
+            // Icebreaker raid after that).
             var onIce = false;
-            try { var w = Comfort.Common.Singleton<GameWorld>.Instance; onIce = w != null && string.Equals(w.LocationId, "Suburbs", StringComparison.OrdinalIgnoreCase); } catch { }
-            if (!onIce)
+            GameWorld w = null;
+            try { w = Comfort.Common.Singleton<GameWorld>.Instance; } catch { }
+            if (w != null)
             {
-                _offIceStreak++;
-                // still inside the debounce window - treat this frame as on-ice anyway so a
-                // single bad read can't zero the staged-init counters below or fall through
-                // to the off-ice branch mid-raid
-                if (_offIceStreak < OffIceDebounceFrames) onIce = true;
+                onIce = string.Equals(w.LocationId, "Suburbs", StringComparison.OrdinalIgnoreCase);
+                _offIceStreak = onIce ? 0 : OffIceDebounceFrames;
             }
             else
             {
-                _offIceStreak = 0;
+                _offIceStreak++;
+                if (_offIceStreak < OffIceDebounceFrames) onIce = true;
             }
             if (!onIce)
             {
