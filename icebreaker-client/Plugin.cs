@@ -323,8 +323,19 @@ namespace Manimal.Icebreaker
             // what this DOES gate is the machinery that costs frames on a player's box:
             // the F9/F10/F11 tuners and probes, the per-object dumps, and the diagnostic
             // MonoBehaviours that walk the scene every raid.
-            // bisect knob for the camera donor graft: component type names to NOT add
-            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "",
+            // bisect knob for the camera donor graft: component type names to NOT add.
+            // Defaulted to skip the whole AllowGraft set (DesaturateEffect, Antialiasing,
+            // Tonemapping, PerfectCullingCamera): since 0.3.1, in-raid loot item icons in
+            // the inventory grid render fully transparent, Icebreaker-only. Freshly-looted
+            // items get their icon rendered mid-raid, while gear already in the player's
+            // inventory before spawn keeps an icon cached from the menu - which lines up
+            // with the camera donor grafting extra OnRenderImage effects onto this map's
+            // world camera that its own Cam2 never carried, if the icon render path shares
+            // that camera/chain. Rather than ship a guess at which one, skip all four by
+            // default: they were always bonus visuals, not worth broken loot icons. Clear
+            // this config back to "" to re-enable the graft once a future build isolates
+            // and fixes the actual offending component.
+            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "DesaturateEffect,Antialiasing,Tonemapping,PerfectCullingCamera",
                 new ConfigDescription("comma-separated component type names the donor graft must skip (bisecting a bad graft component)",
                     null, new ConfigurationManagerAttributes { IsAdvanced = true }));
             DevMode = Config.Bind("Icebreaker", "DevMode", false,
