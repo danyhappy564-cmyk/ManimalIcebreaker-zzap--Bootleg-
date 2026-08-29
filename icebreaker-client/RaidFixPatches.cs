@@ -721,19 +721,34 @@ namespace Manimal.Icebreaker
                 // reports a location, and every frame in that gap lands here — wiping the
                 // cache while the sources sit at volume 0, which strands them silent for the
                 // raid. the window is a blink when you host, but a fika HEADLESS client sits
-                // in it waiting on the host: silent wind + dead zone tones, 07-31
-                if (!IcebreakerAcoustics.IcebreakerLoaded())
+                // in it waiting on the host: silent wind + dead zone tones, 07-31.
+                // Still polled every frame until it actually settles once (preserves that
+                // blink-window guarantee); stops afterward instead of rescanning every loaded
+                // scene for the rest of a long non-Icebreaker raid.
+                if (!_acousticsResetSettled && !IcebreakerAcoustics.IcebreakerLoaded())
+                {
                     IcebreakerAcoustics.ResetAmbientCache();
+                    _acousticsResetSettled = true;
+                }
                 TickVanillaPerfCensus(); // any-map native-perf inventory (vanilla comparison)
                 _mixNextSweep = 0f; _mixAdopted = 0; // fresh adoption count per raid
                 try { IceHoldLogic.MutedSpeakers.Clear(); } catch { } // dead speakers out of the muzzle set
-                var crew = GetComponent<IcebreakerCrew>();
-                if (crew != null) Destroy(crew); // fresh spawner per raid
-                IceCrewJobs.Reset(); // stale profile-keyed jobs must not leak across raids
-                var heli = GetComponent<IcebreakerHeliExfil>();
-                if (heli != null) Destroy(heli);
+                // Crew/heli only ever exist to tear down once, right after leaving the
+                // Icebreaker - re-doing both GetComponent lookups every frame for the rest
+                // of the raid finds nothing every single time.
+                if (!_offIceSpawnersCleared)
+                {
+                    _offIceSpawnersCleared = true;
+                    var crew = GetComponent<IcebreakerCrew>();
+                    if (crew != null) Destroy(crew); // fresh spawner per raid
+                    IceCrewJobs.Reset(); // stale profile-keyed jobs must not leak across raids
+                    var heli = GetComponent<IcebreakerHeliExfil>();
+                    if (heli != null) Destroy(heli);
+                }
                 return;
             }
+            _acousticsResetSettled = false;
+            _offIceSpawnersCleared = false;
 
             TickSpikeProbe(); // stutter forensics — logs spiked frames with per-tick attribution
             TickFrameSplit(); // steady-state forensics — 10s main/render/gpu/wait split
@@ -2934,6 +2949,21 @@ namespace Manimal.Icebreaker
         private static int _maxLodOrig = -1;
         private static bool _qsLogged;
         private static bool _lodProbeOff;
+
+        // The off-ice branch below used to redo two chunks of work on EVERY frame of
+        // EVERY non-Icebreaker raid, forever - measured by ModProfiler as real
+        // per-frame cost (~0.05ms) on maps that never touch the Icebreaker at all:
+        //   - IcebreakerAcoustics.IcebreakerLoaded() scans every loaded scene, on
+        //     the intentional theory that its answer needs polling across the
+        //     blink-length window right after leaving the Icebreaker (see the
+        //     comment at its call site) - but once it has settled once, re-polling
+        //     for the rest of a 30+ minute raid finds nothing new.
+        //   - the crew/heli GetComponent+Destroy pair only ever finds something to
+        //     destroy on the first off-ice frame; every frame after that is two
+        //     component lookups for nothing.
+        // Both stop once settled and re-arm the moment onIce goes true again.
+        private static bool _acousticsResetSettled;
+        private static bool _offIceSpawnersCleared;
 
         private void TickQualityClamps()
         {
