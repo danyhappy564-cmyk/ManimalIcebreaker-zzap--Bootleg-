@@ -266,7 +266,20 @@ namespace Manimal.Icebreaker
     {
         private static float _pendingUntil, _holdUntil, _cooldownUntil;
 
-        internal static void ResetForRaid() { _pendingUntil = _holdUntil = _cooldownUntil = 0f; }
+        // The committed cover spot for the CURRENT ambush window (08-29 field log:
+        // "shoots at him, stands still/looks at the sky, jitters in place" — the log
+        // showed WedgeAmbushLogic.Start() re-firing every tick, ~166 times in one
+        // window, each one re-running the cover search and re-issuing GoToPoint. Once
+        // a spot is picked, later Start() calls for the same window reuse it instead
+        // of repeating the expensive part - see WedgeAmbushLogic.Start().
+        internal static bool HasCommittedCover;
+        internal static Vector3 CommittedCoverPos, CommittedWatchPos;
+
+        internal static void ResetForRaid()
+        {
+            _pendingUntil = _holdUntil = _cooldownUntil = 0f;
+            HasCommittedCover = false;
+        }
 
         internal static void NoteHit()
         {
@@ -276,14 +289,21 @@ namespace Manimal.Icebreaker
 
         internal static bool WantsAmbush => Time.time < _pendingUntil || Time.time < _holdUntil;
 
-        internal static void MarkStarted()
+        // Only called the first time a window actually commits to a cover point (see
+        // WedgeAmbushLogic.Start()) - a re-fired Start() reusing the same committed
+        // point must NOT re-extend the hold window, or a thrashing restart would keep
+        // the ambush "held" indefinitely instead of expiring 25s after it truly began.
+        internal static void MarkStarted(Vector3 coverPos, Vector3 watchPos)
         {
             _pendingUntil = 0f;
             _holdUntil = Time.time + 25f;
             _cooldownUntil = Time.time + 45f;
+            HasCommittedCover = true;
+            CommittedCoverPos = coverPos;
+            CommittedWatchPos = watchPos;
         }
 
-        internal static void Abort() { _pendingUntil = 0f; _holdUntil = 0f; }
+        internal static void Abort() { _pendingUntil = 0f; _holdUntil = 0f; HasCommittedCover = false; }
     }
 
     // DOCTRINE NOTE, stated because it is a deliberate deviation: retail's ambush CAN
@@ -338,6 +358,20 @@ namespace Manimal.Icebreaker
                 var ge = BotOwner.Memory?.GoalEnemy;
                 _watchPos = ge != null ? ge.EnemyLastPosition : BotOwner.Position;
 
+                // Re-fired Start() for a window that already picked a spot (see the
+                // field-log note on WedgeAmbush.HasCommittedCover): reuse it silently
+                // instead of re-scanning cover and re-issuing GoToPoint - whatever keeps
+                // restarting this layer, the actual relocation only needs to happen once.
+                // Safe even mid-travel: Update() re-asserts GoToPoint on its own 0.4s
+                // cadence whenever he isn't within range of _coverPos yet, restart or not.
+                if (WedgeAmbush.HasCommittedCover)
+                {
+                    _coverPos = WedgeAmbush.CommittedCoverPos;
+                    _watchPos = WedgeAmbush.CommittedWatchPos;
+                    _placed = true;
+                    return;
+                }
+
                 // shoot-cover, retail's filter shape: a point with real defence that
                 // keeps some distance from where the enemy was last known. fall back to
                 // any hide point; no cover at all aborts the whole window (standing in
@@ -368,7 +402,7 @@ namespace Manimal.Icebreaker
 
                 _coverPos = point.BasePosition;
                 _placed = true;
-                WedgeAmbush.MarkStarted();
+                WedgeAmbush.MarkStarted(_coverPos, _watchPos);
                 BotOwner.Mover?.GoToPoint(_coverPos, true, 0.6f);
                 Plugin.Log.LogDebug($"[WedgeBrain] blood ambush — relocating {Vector3.Distance(BotOwner.Position, _coverPos):0}m to shoot-cover");
             }
@@ -405,6 +439,11 @@ namespace Manimal.Icebreaker
         {
             base.Stop();
             _next = 0f;
+            // clear the commitment only once the window has truly ended (not on a
+            // same-window restart, where WantsAmbush is still true and a later Start()
+            // must still reuse this spot) - otherwise the NEXT real ambush trigger would
+            // reuse a stale cover point from an encounter that's long over.
+            if (!WedgeAmbush.WantsAmbush) WedgeAmbush.HasCommittedCover = false;
             try { BotOwner.Mover?.SetPose(1f); } catch { }
             // the ghosting-through-doors fix — mandatory in every stand-still logic's Stop
             try { BotOwner.AIData?.SetPosToVoxel(BotOwner.Position); } catch { }
