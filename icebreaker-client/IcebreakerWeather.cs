@@ -173,7 +173,9 @@ namespace Manimal.Icebreaker
         // hour the recovered Date held). StormStartedEvent escalates the winter state to
         // SetupWinterStorm — BSG's actual blizzard.
         private static bool _stormRaised;
-        private static bool _mboitChecked;
+#if false
+        private static bool _mboitChecked; // only read/written inside the disabled MBOIT block below
+#endif
 
         // 0.16.9 never uses MBOIT so no camera prefab carries the component — but ALL
         // its parts ship in resources.assets (the 4 compute shaders under their real

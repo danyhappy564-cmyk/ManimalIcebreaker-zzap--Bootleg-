@@ -203,11 +203,16 @@ namespace Manimal.Icebreaker
             }
             if (snapped.Count == 0) return new List<Vector3>();
 
-            List<Vector3> TryRoute(float minSpacing)
+            // returns (route, rejectedCount) instead of touching the enclosing method's `ref
+            // rejected` directly: a local function can't reference a ref/out/in parameter of
+            // its enclosing method once it also captures anything else (CS1628) - `snapped`
+            // being captured here is what triggers it.
+            (List<Vector3> route, int rejectedCount) TryRoute(float minSpacing)
             {
                 var route = new List<Vector3> { snapped[0] };
                 var used = new HashSet<int> { 0 };
                 var path = new NavMeshPath();
+                int rejectedHere = 0;
 
                 while (route.Count < MaxPointsPerWay)
                 {
@@ -222,7 +227,7 @@ namespace Manimal.Icebreaker
                         if (!NavMesh.CalculatePath(from, snapped[i], NavMesh.AllAreas, path)
                             || path.status != NavMeshPathStatus.PathComplete)
                         {
-                            rejected++;
+                            rejectedHere++;
                             // burn it permanently, not just this round: a failed PathComplete means
                             // a different navmesh component, and every later route point is reachable
                             // from this one, so it can never reach the candidate either
@@ -235,10 +240,11 @@ namespace Manimal.Icebreaker
                     used.Add(best);
                     route.Add(snapped[best]);
                 }
-                return route;
+                return (route, rejectedHere);
             }
 
-            var route = TryRoute(MinSpacing);
+            var (route, rejectedCount) = TryRoute(MinSpacing);
+            rejected += rejectedCount;
             // CRAMPED-ROOM FALLBACK (08-29 field report: Wedge's own room, BotZoneRoomsThird,
             // logged "only 1 reachable point(s) — no way built" and he stood frozen the whole
             // fight). A room small enough that every candidate sits closer than MinSpacing (7m)
@@ -246,7 +252,11 @@ namespace Manimal.Icebreaker
             // reachable candidates available. A short in-room shuffle beats a statue: retry
             // once with a much tighter floor before giving up on the zone entirely.
             if (route.Count < MinPointsPerWay && snapped.Count >= MinPointsPerWay)
-                route = TryRoute(MinSpacing * 0.25f);
+            {
+                var (route2, rejectedCount2) = TryRoute(MinSpacing * 0.25f);
+                route = route2;
+                rejected += rejectedCount2;
+            }
             return route;
         }
     }
