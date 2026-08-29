@@ -5,7 +5,7 @@
     <ModGuid>com.manimal.icebreaker</ModGuid>
     <ModUsername>Manimal</ModUsername>
     <ModDisplayName>Icebreaker</ModDisplayName>
-    <SPTPath>D:\SPTDev</SPTPath>
+    <SPTPath>E:\SPT 4.0.10</SPTPath>
     <FikaPath>D:\SPTDevFika</FikaPath>
   </PropertyGroup>
 </Project>
