@@ -392,6 +392,9 @@ namespace Manimal.Icebreaker
                         // types resolve. gated on IceGate at call time, so the mod keeps
                         // working normally on every other map.
                         IcebreakerLockableDoorsOff.TryPatch(new HarmonyLib.Harmony("com.manimal.icebreaker.lockabledoors"));
+                        // ORBIT's own map table doesn't know Suburbs either — keep its
+                        // per-bot brain layer from NREing into our custom layers' construction
+                        OrbitBrainLayerCompat.TryPatch(new HarmonyLib.Harmony("com.manimal.icebreaker.orbitcompat"));
                     }
                 } catch { }
             };

@@ -405,4 +405,59 @@ namespace Manimal.Icebreaker
             catch { return true; }
         }
     }
+
+    // ORBIT MANNEQUIN BUG (08-29 field report: Wedge stood through gunfire, unresponsive,
+    // in the room he spawns in — nearby BD reacted fine). traced via Player.log:
+    // OrbitInitPatch.Postfix already NREs on our map (its own per-map table has no
+    // 'Suburbs' entry — caught and swallowed by RaidFirewall, log: "ORBIT's hook
+    // OrbitInitPatch.Postfix threw... key 'Suburbs' not present") and never finishes
+    // setting up Singleton<OrbitManager>.Instance. Every bot's OrbitBrainLayer
+    // constructor then reads that null singleton and NREs too — one frame later, deeper
+    // in BigBrain's per-bot custom-layer construction loop:
+    //   OrbitBrainLayer..ctor -> Activator.CreateInstance -> CustomLayerWrapper..ctor
+    //   -> BotBaseBrainActivatePatch.PatchPrefix
+    // BigBrain builds a bot's registered custom layers in one pass with no per-layer
+    // isolation, so ORBIT's throw there aborts whatever of OUR OWN layers (WedgeRooms/
+    // WedgeAmbush/IceCrewHold) were still queued after it for THAT bot — leaving him
+    // with no combat behavior at all, not even vanilla's. ORBIT already has a clean
+    // "do nothing" path for bots it wants to ignore (IsExcludedRole -> _excluded=true,
+    // gates its own IsActive() to false and skips the OrbitManager/event-subscription
+    // work entirely) — this patch just routes our map into that same path instead of
+    // letting the constructor run into the null singleton. Mod-specific by necessity
+    // (the failure is inside ORBIT's own reflection-constructed layer, upstream of any
+    // choke point we control), but harmless if ORBIT isn't installed or its internals
+    // move (Prepare no-ops instead of throwing) and completely inert off our map.
+    internal static class OrbitBrainLayerCompat
+    {
+        private static bool _attempted;
+        private static System.Reflection.FieldInfo _excludedField;
+
+        internal static void TryPatch(Harmony harmony)
+        {
+            if (_attempted) return;
+            _attempted = true;
+            try
+            {
+                var t = AccessTools.TypeByName("Orbit.Brain.OrbitBrainLayer");
+                if (t == null) return; // ORBIT not installed
+                var ctor = AccessTools.Constructor(t, new[] { typeof(BotOwner), typeof(int) });
+                _excludedField = AccessTools.Field(t, "_excluded");
+                if (ctor == null || _excludedField == null)
+                {
+                    Plugin.Log.LogWarning("[OrbitCompat] OrbitBrainLayer shape changed (ctor/_excluded not found) — skipping");
+                    return;
+                }
+                harmony.Patch(ctor, prefix: new HarmonyMethod(typeof(OrbitBrainLayerCompat), nameof(Prefix)));
+                Plugin.Log.LogInfo("[OrbitCompat] OrbitBrainLayer excluded on the icebreaker (its own map table has no 'Suburbs' entry)");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[OrbitCompat] patch failed: {e.Message}"); }
+        }
+
+        private static bool Prefix(object __instance)
+        {
+            if (!IceGate.On) return true;
+            try { _excludedField.SetValue(__instance, true); } catch { }
+            return false; // skip ORBIT's own body — no OrbitManager singleton lookup, no NRE
+        }
+    }
 }
