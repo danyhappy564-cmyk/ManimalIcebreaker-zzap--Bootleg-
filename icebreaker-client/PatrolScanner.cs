@@ -203,36 +203,50 @@ namespace Manimal.Icebreaker
             }
             if (snapped.Count == 0) return new List<Vector3>();
 
-            var route = new List<Vector3> { snapped[0] };
-            var used = new HashSet<int> { 0 };
-            var path = new NavMeshPath();
-
-            while (route.Count < MaxPointsPerWay)
+            List<Vector3> TryRoute(float minSpacing)
             {
-                var from = route[route.Count - 1];
-                int best = -1; float bestD = float.MaxValue;
-                for (int i = 0; i < snapped.Count; i++)
+                var route = new List<Vector3> { snapped[0] };
+                var used = new HashSet<int> { 0 };
+                var path = new NavMeshPath();
+
+                while (route.Count < MaxPointsPerWay)
                 {
-                    if (used.Contains(i)) continue;
-                    float d = Vector3.Distance(from, snapped[i]);
-                    if (d < MinSpacing || d > MaxSpacing || d >= bestD) continue;
-                    // only pay for the path query on a candidate that could actually win
-                    if (!NavMesh.CalculatePath(from, snapped[i], NavMesh.AllAreas, path)
-                        || path.status != NavMeshPathStatus.PathComplete)
+                    var from = route[route.Count - 1];
+                    int best = -1; float bestD = float.MaxValue;
+                    for (int i = 0; i < snapped.Count; i++)
                     {
-                        rejected++;
-                        // burn it permanently, not just this round: a failed PathComplete means
-                        // a different navmesh component, and every later route point is reachable
-                        // from this one, so it can never reach the candidate either
-                        used.Add(i);
-                        continue;
+                        if (used.Contains(i)) continue;
+                        float d = Vector3.Distance(from, snapped[i]);
+                        if (d < minSpacing || d > MaxSpacing || d >= bestD) continue;
+                        // only pay for the path query on a candidate that could actually win
+                        if (!NavMesh.CalculatePath(from, snapped[i], NavMesh.AllAreas, path)
+                            || path.status != NavMeshPathStatus.PathComplete)
+                        {
+                            rejected++;
+                            // burn it permanently, not just this round: a failed PathComplete means
+                            // a different navmesh component, and every later route point is reachable
+                            // from this one, so it can never reach the candidate either
+                            used.Add(i);
+                            continue;
+                        }
+                        best = i; bestD = d;
                     }
-                    best = i; bestD = d;
+                    if (best < 0) break;
+                    used.Add(best);
+                    route.Add(snapped[best]);
                 }
-                if (best < 0) break;
-                used.Add(best);
-                route.Add(snapped[best]);
+                return route;
             }
+
+            var route = TryRoute(MinSpacing);
+            // CRAMPED-ROOM FALLBACK (08-29 field report: Wedge's own room, BotZoneRoomsThird,
+            // logged "only 1 reachable point(s) — no way built" and he stood frozen the whole
+            // fight). A room small enough that every candidate sits closer than MinSpacing (7m)
+            // to the seed leaves the loop stuck at 1 point forever, even with plenty of
+            // reachable candidates available. A short in-room shuffle beats a statue: retry
+            // once with a much tighter floor before giving up on the zone entirely.
+            if (route.Count < MinPointsPerWay && snapped.Count >= MinPointsPerWay)
+                route = TryRoute(MinSpacing * 0.25f);
             return route;
         }
     }
