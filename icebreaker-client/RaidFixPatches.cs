@@ -4640,19 +4640,36 @@ namespace Manimal.Icebreaker
     [HarmonyPatch(typeof(BotOwner), nameof(BotOwner.Create))]
     internal static class Patch_BotStartCorePoint
     {
+        // ModProfiler (08-29 field report, stutters on door-opens/zone entries where
+        // bots spawn in a batch): 54ms average PER BOT CREATED. Every single call redid
+        // a full scene search (FindObjectOfType<AICoversData>, itself not free) plus a
+        // linear scan over every AI core point on the map - for a bot-spawn trigger that
+        // drops several bots at once, that cost stacks directly onto the hitch the
+        // player feels at that exact door/doorway. CorePoints is only (re)built once per
+        // raid by CoverScanner, so it's safe to fetch it once and reuse until the
+        // GameWorld instance changes (new raid).
+        private static List<AICorePoint> _cores;
+        private static GameWorld _coresWorld;
+
         private static void Postfix(BotOwner __result)
         {
             try
             {
                 if (!IceGate.On) return; // vanilla maps have real baked core ids
                 if (__result == null || __result.StartCorePoint != null) return;
-                var covers = UnityEngine.Object.FindObjectOfType<AICoversData>();
-                var cores = covers != null && covers.AICorePointsHolder != null ? covers.AICorePointsHolder.CorePoints : null;
-                if (cores == null || cores.Count == 0) return;
+
+                var world = Comfort.Common.Singleton<GameWorld>.Instance;
+                if (_cores == null || !ReferenceEquals(_coresWorld, world))
+                {
+                    _coresWorld = world;
+                    var covers = UnityEngine.Object.FindObjectOfType<AICoversData>();
+                    _cores = covers != null && covers.AICorePointsHolder != null ? covers.AICorePointsHolder.CorePoints : null;
+                }
+                if (_cores == null || _cores.Count == 0) return;
                 AICorePoint best = null;
                 float bestD = float.MaxValue;
                 var pos = __result.Transform != null ? __result.Transform.position : __result.GetPlayer.Transform.position;
-                foreach (var c in cores)
+                foreach (var c in _cores)
                 {
                     if (c == null) continue;
                     float d = (c.Position - pos).sqrMagnitude;
