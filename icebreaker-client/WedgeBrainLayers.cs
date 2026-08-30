@@ -266,6 +266,20 @@ namespace Manimal.Icebreaker
     {
         private static float _pendingUntil, _holdUntil, _cooldownUntil;
 
+        // (08-30 field report: hit from behind, he just keeps facing forward — root
+        // caused via the per-hit diagnostic to WedgeRooms/WedgeAmbush forcibly steering
+        // his LOOK toward the stale _watch/EnemyLastPosition every 0.4s tick, fighting
+        // whatever vanilla/SAIN's own turn-toward-recent-damage reaction would otherwise
+        // do. IsUnderFire (the layers' existing yield check) does NOT reflect "just took
+        // a confirmed hit" — the diagnostic showed isUnderFire=False on the very frame a
+        // 31-dmg stomach hit landed — so it never released him. Track real hits
+        // separately and have both logics skip their forced LookToPoint for a few
+        // seconds after one, so the bot's own aim/threat system can react naturally
+        // instead of being overridden toward a position that's wrong for an attacker
+        // that was never actually seen.
+        internal static float LastHitTime = -999f;
+        internal const float LookOverrideSuppressAfterHit = 4f;
+
         // The committed cover spot for the CURRENT ambush window (08-29 field log:
         // "shoots at him, stands still/looks at the sky, jitters in place" — the log
         // showed WedgeAmbushLogic.Start() re-firing every tick, ~166 times in one
@@ -283,6 +297,7 @@ namespace Manimal.Icebreaker
 
         internal static void NoteHit()
         {
+            LastHitTime = Time.time;
             if (Time.time >= _cooldownUntil && Time.time >= _holdUntil)
                 _pendingUntil = Time.time + 6f;
         }
@@ -380,11 +395,19 @@ namespace Manimal.Icebreaker
                 // ambush relocated 9m — one couch over, read as "meh". FindClosestPoint
                 // walks nearest-first, so without a self-distance floor the "relocate"
                 // is always a shuffle. the disappear feel IS the distance.)
+                // (08-30 field log: this search radius was ALSO 10m — asking for a point
+                // within 10m of self that is simultaneously >=10m from self left only the
+                // radius's exact edge as valid, so it missed almost every real room and
+                // fell to the no-floor FindHidePoint fallback below, which grabbed
+                // whatever was closest = his own feet ("relocating 0m to shoot-cover" in
+                // the log, the entire bug: standing still, watching a stale point, never
+                // reacting to a hit from an angle he never saw). widen the search radius
+                // well past the floor so points that actually satisfy both exist to find.
                 var self = BotOwner.Position;
                 CustomNavigationPoint point = null;
                 try
                 {
-                    point = BotOwner.Covers?.FindClosestPoint(self, 10f, _watchPos,
+                    point = BotOwner.Covers?.FindClosestPoint(self, 25f, _watchPos,
                         false, g => g != null && g.DefenceLevel >= 2f
                                  && (g.Position - self).sqrMagnitude >= 100f);
                 }
@@ -423,9 +446,14 @@ namespace Manimal.Icebreaker
                 {
                     // in position: slight crouch, eyes on where they were last seen —
                     // the moment they show themselves, IsActive drops this layer and
-                    // vanilla combat opens up from here
+                    // vanilla combat opens up from here. EXCEPT right after a fresh hit:
+                    // _watchPos is wherever he last SAW them, which is worthless (and
+                    // actively wrong) against an attacker landing hits from an angle he
+                    // never saw them from — let his own aim/threat reaction handle that
+                    // instead of fighting it toward a stale point.
                     BotOwner.Mover?.SetPose(0.6f);
-                    BotOwner.Steering?.LookToPoint(_watchPos + Vector3.up * 1.4f);
+                    if (Time.time - WedgeAmbush.LastHitTime > WedgeAmbush.LookOverrideSuppressAfterHit)
+                        BotOwner.Steering?.LookToPoint(_watchPos + Vector3.up * 1.4f);
                 }
                 else
                 {
@@ -569,7 +597,11 @@ namespace Manimal.Icebreaker
                     if ((BotOwner.Position - _coverPos).sqrMagnitude < 2.25f)
                     {
                         BotOwner.Mover?.SetPose(0.75f);
-                        BotOwner.Steering?.LookToPoint(_watch + Vector3.up * 1.4f);
+                        // same reasoning as WedgeAmbushLogic — don't force his look at a
+                        // stale _watch point right after a hit that came from an angle he
+                        // never saw; let his own threat reaction turn him toward it
+                        if (Time.time - WedgeAmbush.LastHitTime > WedgeAmbush.LookOverrideSuppressAfterHit)
+                            BotOwner.Steering?.LookToPoint(_watch + Vector3.up * 1.4f);
                     }
                     else if (Time.time >= _nextGoReassert)
                     {
@@ -594,7 +626,12 @@ namespace Manimal.Icebreaker
                 CustomNavigationPoint point = null;
                 try
                 {
-                    point = BotOwner.Covers?.FindClosestPoint(self, 6f, _watch,
+                    // (08-30: same self-distance-vs-search-radius contradiction as the
+                    // ambush relocate above — a 6m radius left only a 1m band [5m-6m]
+                    // able to satisfy the >=StepAway floor, so this usually found
+                    // nothing and fell to "hold the current cover" instead of actually
+                    // cycling. widen past the floor so points beyond it are reachable.
+                    point = BotOwner.Covers?.FindClosestPoint(self, 15f, _watch,
                         false, g => g != null && g.DefenceLevel >= 2f
                                  && (g.Position - anchor).sqrMagnitude <= RoomRadius * RoomRadius
                                  && (g.Position - self).sqrMagnitude >= StepAway * StepAway);
