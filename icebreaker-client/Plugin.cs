@@ -395,6 +395,9 @@ namespace Manimal.Icebreaker
                         // ORBIT's own map table doesn't know Suburbs either — keep its
                         // per-bot brain layer from NREing into our custom layers' construction
                         OrbitBrainLayerCompat.TryPatch(new HarmonyLib.Harmony("com.manimal.icebreaker.orbitcompat"));
+                        // HollywoodGraphics' Bloom ctor NREs on our Cam2 fallback and never
+                        // recovers — guard its Update against the null this leaves behind
+                        HollywoodGraphicsBloomCompat.TryPatch(new HarmonyLib.Harmony("com.manimal.icebreaker.hgcompat"));
                     }
                 } catch { }
             };

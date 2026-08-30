@@ -460,4 +460,53 @@ namespace Manimal.Icebreaker
             return false; // skip ORBIT's own body — no OrbitManager singleton lookup, no NRE
         }
     }
+
+    // HOLLYWOODGRAPHICS BLOOM NRE, EVERY FRAME (user-verified fix from an earlier
+    // decompiled-source pass, ported here as a Harmony guard since we don't carry that
+    // mod's source): HollywoodGraphics.Components.Bloom's constructor does
+    // `camera.gameObject.AddComponent<UltimateBloom>()` then immediately reads
+    // `_ultimateBloom.m_BloomIntensities.Length` in ResetIntensities — before
+    // UltimateBloom's own Start() has ever run, so that array is still null. On our
+    // Cam2 fallback (no retail UltimateBloom prefab wiring) this NREs every time,
+    // which means `GraphicsController._bloom = new Bloom()` never completes and
+    // `_bloom` stays null — and GraphicsController.Update() calls `_bloom.Update()`
+    // unconditionally, so it NREs AGAIN, every single frame, for the rest of the raid
+    // (an uncaught exception thrown and logged every frame is a real, continuous
+    // frame-time tax, separate from the one-shot stutter the dead-effect guard already
+    // works around). Global, not IceGate-gated: the bug is in HollywoodGraphics' own
+    // null-safety, not specific to our map — vanilla cameras just don't hit it because
+    // they ship a working UltimateBloom already configured.
+    internal static class HollywoodGraphicsBloomCompat
+    {
+        private static bool _attempted;
+        private static System.Reflection.FieldInfo _bloomField;
+
+        internal static void TryPatch(Harmony harmony)
+        {
+            if (_attempted) return;
+            _attempted = true;
+            try
+            {
+                var t = AccessTools.TypeByName("HollywoodGraphics.GraphicsController");
+                if (t == null) return; // HollywoodGraphics not installed
+                var update = AccessTools.Method(t, "Update");
+                _bloomField = AccessTools.Field(t, "_bloom");
+                if (update == null || _bloomField == null)
+                {
+                    Plugin.Log.LogWarning("[HGCompat] GraphicsController shape changed (Update/_bloom not found) — skipping");
+                    return;
+                }
+                harmony.Patch(update, prefix: new HarmonyMethod(typeof(HollywoodGraphicsBloomCompat), nameof(Prefix)));
+                Plugin.Log.LogInfo("[HGCompat] guarded HollywoodGraphics.GraphicsController.Update against a null "
+                    + "Bloom (its own ctor NREs when AddComponent<UltimateBloom> hasn't run Start() yet)");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[HGCompat] patch failed: {e.Message}"); }
+        }
+
+        private static bool Prefix(object __instance)
+        {
+            try { return _bloomField.GetValue(__instance) != null; } // skip original if _bloom is null
+            catch { return true; }
+        }
+    }
 }

@@ -234,6 +234,15 @@ namespace Manimal.Icebreaker
                     var lods = g.GetLODs();
                     if (lods == null || lods.Length == 0) continue;
                     int last = lods.Length - 1;
+                    // clamp under the PREVIOUS LOD level's own threshold — SetLODs logs a
+                    // warning (and, per field verification, silently no-ops the whole call)
+                    // if a level's transition height is allowed to reach or pass the level
+                    // above it, which `want` can do unclamped when the camera is close.
+                    if (last > 0)
+                    {
+                        float ceiling = lods[last - 1].screenRelativeTransitionHeight - 0.001f;
+                        if (want >= ceiling) want = Mathf.Max(0f, ceiling);
+                    }
                     if (Mathf.Abs(lods[last].screenRelativeTransitionHeight - want) > 0.0005f)
                     {
                         lods[last].screenRelativeTransitionHeight = want;
