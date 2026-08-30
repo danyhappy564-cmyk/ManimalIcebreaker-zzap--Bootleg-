@@ -403,18 +403,30 @@ namespace Manimal.Icebreaker
                 // the log, the entire bug: standing still, watching a stale point, never
                 // reacting to a hit from an angle he never saw). widen the search radius
                 // well past the floor so points that actually satisfy both exist to find.
+                // (08-30, round 2: widening the radius above wasn't enough on its own —
+                // a genuinely cramped room can lack ANY point with DefenceLevel>=2 even
+                // out to 25m, so FindClosestPoint still legitimately returns null there
+                // and this fell to the distance-less FindHidePoint fallback, which can
+                // still hand back something at/near self. Don't trust EITHER source
+                // blindly: reject whatever comes back if it's not actually far enough
+                // away, same as "no cover at all" — a fake relocate is worse than none.
+                const float MinRelocateSqr = 100f; // 10m, matching the intended floor
                 var self = BotOwner.Position;
                 CustomNavigationPoint point = null;
                 try
                 {
                     point = BotOwner.Covers?.FindClosestPoint(self, 25f, _watchPos,
                         false, g => g != null && g.DefenceLevel >= 2f
-                                 && (g.Position - self).sqrMagnitude >= 100f);
+                                 && (g.Position - self).sqrMagnitude >= MinRelocateSqr);
                 }
                 catch { }
+                if (point != null && (point.BasePosition - self).sqrMagnitude < MinRelocateSqr)
+                    point = null;
                 if (point == null)
                 {
                     try { point = BotOwner.Covers?.FindHidePoint(BotOwner.Position, 1f); } catch { }
+                    if (point != null && (point.BasePosition - self).sqrMagnitude < MinRelocateSqr)
+                        point = null;
                 }
                 if (point == null)
                 {
