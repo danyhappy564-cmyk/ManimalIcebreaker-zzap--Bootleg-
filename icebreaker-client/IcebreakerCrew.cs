@@ -181,6 +181,25 @@ namespace Manimal.Icebreaker
             return list;
         }
 
+        // shared replacement for UnityEngine.Object.FindObjectsOfType<BotOwner>() on any
+        // path that polls repeatedly (every 0.5-1s, for up to minutes at a time): a full
+        // scene scan on this map's prop count is the same ~55ms-class stutter AliveRogues()
+        // and C3KeycardSweep() were pulled off of on 08-29. HoldEngineSquad/PlaceChargeSweep/
+        // PlaceWedgeTag were missed in that pass (2026-09 profiler run: HoldEngineSquad's
+        // 0.5s poll alone matched the sustained post-trigger stutter almost exactly, and
+        // stopped growing the moment its hold count was satisfied).
+        private static IEnumerable<BotOwner> AllBotOwners()
+        {
+            var all = Singleton<GameWorld>.Instance?.AllAlivePlayersList;
+            if (all == null) yield break;
+            foreach (var pl in all)
+            {
+                if (pl == null || !pl.AIData.IsAI) continue;
+                var b = pl.AIData.BotOwner;
+                if (b != null) yield return b;
+            }
+        }
+
         // trim/shaver machinery deleted 08-05 (user call): counting live rogues to
         // decide corrections was a race against the staggered wave spawner, and every
         // flood traced back to it. the deterministic spawn plan above replaced it.
@@ -593,7 +612,7 @@ namespace Manimal.Icebreaker
             while (Time.time < giveUp && !_chargePlaced)
             {
                 cands.Clear();
-                foreach (var b in UnityEngine.Object.FindObjectsOfType<BotOwner>())
+                foreach (var b in AllBotOwners())
                 {
                     if (b == null || b.Profile?.Info?.Settings?.Role != (WildSpawnType)BdIb || IsPenBot(b)) continue;
                     var p = b.GetPlayer;
@@ -649,7 +668,7 @@ namespace Manimal.Icebreaker
             float giveUp = Time.time + 90f; // he generates on the trigger frame; wait him out
             while (Time.time < giveUp && !_wedgeTagPlaced)
             {
-                foreach (var b in UnityEngine.Object.FindObjectsOfType<BotOwner>())
+                foreach (var b in AllBotOwners())
                 {
                     if (b == null || b.Profile?.Info?.Settings?.Role != (WildSpawnType)BdWedge) continue;
                     var p = b.GetPlayer;
@@ -825,7 +844,7 @@ namespace Manimal.Icebreaker
                 if (Time.time < nextHeavy) { if (held.Count > 0 && FikaBridge.AnyHumanIn(bounds)) break; yield return null; continue; }
                 nextHeavy = Time.time + 0.5f;
                 if (free.Count + held.Count < expected)
-                    foreach (var b in UnityEngine.Object.FindObjectsOfType<BotOwner>())
+                    foreach (var b in AllBotOwners())
                     {
                         if (free.Count + held.Count >= expected) break; // one sweep used to add 5/4
                         // IsPenBot: a pool bot in pen transit stands at its birth marker
