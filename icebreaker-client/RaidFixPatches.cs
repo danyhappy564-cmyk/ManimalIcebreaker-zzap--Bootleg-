@@ -1451,7 +1451,7 @@ namespace Manimal.Icebreaker
             // authored at intensity 0 and only get lit by the lamp pass above
             IcebreakerVolumetricLights.Restore(); yield return null;
             AttachCullingCamera(); yield return null;
-            BuildDistanceCuller(); yield return null;
+            yield return BuildDistanceCullerSliced();
             BuildLightCuller(); yield return null;
             EnsureCullingManager();
             HealDoorRegistry(); yield return null; // fika door sync resolves by this registry
@@ -3222,7 +3222,19 @@ namespace Manimal.Icebreaker
             catch (Exception e) { Plugin.Log.LogWarning($"[SSR] clamp failed (retail SSR stays): {e.Message}"); }
         }
 
-        private static void BuildDistanceCuller()
+        // PORTING NOTE (2026-09): this used to run as one synchronous foreach over every
+        // MeshRenderer in the scene. On this map's ~148k+ props that foreach IS the raid-
+        // start freeze: the [Stutter] probe caught a single 18.3s UNTRACKED frame during
+        // stage two, with every ticked system (autopsy/amands/ieapi/lodFloor/qualClamp/
+        // mixRoute) reading near-zero — meaning the time was spent inside a call StageTwo
+        // makes directly, not in anything Update() attributes. GetComponentInParent<Player>
+        // + GetComponentInParent<WorldInteractiveObject> + the manual parent-chain walk
+        // against lcRoots, times a six-figure renderer count, is exactly the kind of cost
+        // the 07-27 telemetry caught for the OLD all-in-one-frame stage two (14,292ms) —
+        // BuildDistanceCuller was the one builder that never got the slicing RebindShaders
+        // already has. Sliced it the same way: walk the scene in chunks, yielding between
+        // them, so a dense map costs many small frames instead of one huge one.
+        private static System.Collections.IEnumerator BuildDistanceCullerSliced()
         {
             _distEntries.Clear();
 
@@ -3234,8 +3246,17 @@ namespace Manimal.Icebreaker
             // decoration.
             var lcRoots = BuildLootContainerRoots();
 
+            int slice = 3000;
             foreach (var mr in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
             {
+                // Decremented unconditionally, before any of the filters below can
+                // `continue` past it — a slice tracker that only ticks down on the
+                // survivors reaching the bottom of the loop would still let a large
+                // excluded-but-scanned batch (WorldInteractiveObject meshes, structural
+                // pieces >12m) run this frame uninterrupted, which is exactly the cost
+                // being sliced away here.
+                if (--slice <= 0) { slice = 3000; yield return null; }
+
                 // ONLY map-scene geometry — it's static so cached positions are valid.
                 // anything else (weapons/viewmodels/loot/pools live in other scenes or
                 // DontDestroyOnLoad) MOVES, and a cached-position culler will eat it —
