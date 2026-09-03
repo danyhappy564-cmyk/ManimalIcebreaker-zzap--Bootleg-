@@ -324,30 +324,30 @@ namespace Manimal.Icebreaker
             // the F9/F10/F11 tuners and probes, the per-object dumps, and the diagnostic
             // MonoBehaviours that walk the scene every raid.
             // bisect knob for the camera donor graft: component type names to NOT add.
-            // NARROWED TO PerfectCullingCamera ONLY (2026-09, field report): 08/29 defaulted
-            // this to skip the whole AllowGraft set (DesaturateEffect, Antialiasing,
-            // Tonemapping, PerfectCullingCamera) over a transparent-loot-icon bug, without
-            // ever isolating which of the four actually caused it. That trade turned out to
-            // have its own cost: visiting the hideout then loading straight into icebreaker
-            // in the same client session reliably left the map's TAA broken (confirmed
-            // jagged edges, settings still correctly reporting TAA_High) for the rest of
-            // that raid on every repro attempt. Re-enabling the full graft (config "") fixed
-            // that on every retest — Cam2's chassis is missing pieces a real map's camera
-            // has, and with all four holes filled the camera no longer has anything left
-            // over from the hideout to inherit. The transparent-icon bug is UNCHANGED by any
-            // of this (confirmed present with the graft fully skipped, fully restored, and
-            // now with only PerfectCullingCamera skipped), so it was never caused by any of
-            // these four to begin with — 08/29's guess was wrong.
-            // BUT grafting PerfectCullingCamera brought a new, distance-dependent edge/
-            // silhouette artifact that was NOT present before this whole investigation
-            // started (confirmed via commit timestamp against when the player first saw
-            // it) — third-party occlusion culling (Koenigz.PerfectCulling) fighting our own
-            // sidecar culling volumes at range, most likely. Skipping just this one keeps
-            // the TAA fix (DesaturateEffect/Antialiasing/Tonemapping still graft fine on
-            // their own) without the new artifact. If TAA breaks again after a hideout visit
-            // with this set, one of the other three was doing part of the work too — clear
-            // this back to "" first to confirm before assuming a fourth culprit.
-            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "PerfectCullingCamera",
+            // Defaulted to skip the whole AllowGraft set (DesaturateEffect, Antialiasing,
+            // Tonemapping, PerfectCullingCamera): since 0.3.1, in-raid loot item icons in
+            // the inventory grid render fully transparent, Icebreaker-only. Freshly-looted
+            // items get their icon rendered mid-raid, while gear already in the player's
+            // inventory before spawn keeps an icon cached from the menu - which lines up
+            // with the camera donor grafting extra OnRenderImage effects onto this map's
+            // world camera that its own Cam2 never carried, if the icon render path shares
+            // that camera/chain. Rather than ship a guess at which one, skip all four by
+            // default: they were always bonus visuals, not worth broken loot icons. Clear
+            // this config back to "" to re-enable the graft once a future build isolates
+            // and fixes the actual offending component.
+            //
+            // TRIED AND REVERTED (2026-09): a hideout-then-icebreaker TAA/LOD-dither/light-
+            // flicker report was chased hard here - emptying this list, then narrowing it to
+            // just PerfectCullingCamera, "fixed" it in isolated retests but the player later
+            // confirmed neither actually mattered (still broke, or the "fix" just happened to
+            // coincide with a run that skipped hideout). Restored to the original four-name
+            // default since none of this was ever confirmed to do anything. The underlying
+            // bug is real and reproduces 100% (hideout -> icebreaker in the same client
+            // session breaks TAA/LOD at range; any other map after hideout is fine; icebreaker
+            // fresh from the menu is fine) but the actual mechanism was never found - see the
+            // README for the full graveyard of ruled-out mods and theories before touching
+            // this again.
+            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "DesaturateEffect,Antialiasing,Tonemapping,PerfectCullingCamera",
                 new ConfigDescription("comma-separated component type names the donor graft must skip (bisecting a bad graft component)",
                     null, new ConfigurationManagerAttributes { IsAdvanced = true }));
             DevMode = Config.Bind("Icebreaker", "DevMode", false,

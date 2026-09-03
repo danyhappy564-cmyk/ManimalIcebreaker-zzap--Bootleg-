@@ -163,7 +163,30 @@
   나머지 셋(DesaturateEffect/Antialiasing/Tonemapping)만 그래프트해도 하이드아웃
   →쇄빙선 AA 깨짐은 그대로 고쳐진 채 유지되는지 확인 필요
 
-- 결과: `CamDonorSkip` 기본값을 `PerfectCullingCamera`로 설정 (`Plugin.cs`).
-  아이콘 반투명 버그는 이 값이 뭐든(스킵 전체/스킵 없음/PerfectCullingCamera만
-  스킵) 항상 동일하게 존재 — 이 네 컴포넌트 중 어느 것과도 무관한 별도 이슈로
-  분리
+- (또 재수정, 최종) 사용자가 재테스트 후 정정: `CamDonorSkip`을 뭘로 바꾸든
+  (전체 스킵/전체 해제/PerfectCullingCamera만 스킵) 실제로는 증상 재현 여부에
+  아무 차이가 없었음 — 앞서 "고쳐졌다"고 봤던 결과는 그 테스트 때 하필
+  하이드아웃을 안 거쳐서 우연히 정상으로 보였던 것으로 정정. `CamDonorSkip`은
+  원래 08/29 기본값(`DesaturateEffect,Antialiasing,Tonemapping,PerfectCullingCamera`
+  전부 스킵)으로 되돌림 — 이 설정은 애초에 이 버그랑 무관했음
+
+- 추가로 `QualitySettings.lodBias`(유니티 전역 상태, 08-18에 "쇄빙선 나가면
+  다른 맵 렌더 거리도 줄어든 채 남는" 비슷한 버그가 있었던 그 값)가 하이드아웃
+  발 잔재일 가능성을 의심해서, 라이드 시작 시 캡처하는 "game was X" 로그를
+  LogDebug에서 LogWarning으로 올려 상시 노출되게 해봄 — 재현 로그에서 값이
+  2.00(정상)으로 나와서 이 이론도 기각, 로그 레벨 변경도 되돌림
+
+- 결과: 원인 특정 실패. `CamDonorSkip`/`lodBias` 둘 다 원상복구(`Plugin.cs`,
+  `RaidFixPatches.cs`) — 이번 조사에서 시도한 수정 중 실제로 증상에 영향을 준
+  것은 하나도 확인되지 않음. 버그 자체는 100% 재현됨이 확인된 상태로 남음
+  (같은 클라이언트 세션에서 하이드아웃 방문 후 쇄빙선 진입 시 매번 발생: TAA
+  깨짐 + 거리에 따라 바닥/천장 등에 도트 노이즈 패턴 + 먼 거리 불빛이 떨리는
+  것처럼 보임 — 종합하면 TAA의 프레임별 서브픽셀 지터가 적용은 되는데 리졸브/
+  블렌드가 안 되고 있는 것으로 추정. 하이드아웃 없이 바로 쇄빙선 들어가거나,
+  하이드아웃 후 쇄빙선 아닌 다른 맵으로 가면 100% 정상 — 쇄빙선 자체의 라이드
+  재진입 처리 문제로 좁혀졌으나 정확한 메커니즘은 못 찾음). 이 세션에서 제외
+  확인된 것: TargetDummies, HideoutShootout, BetterVision/BetterThermalNightVision,
+  Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade
+  잔재, `ScopeZoomHandler` NRE(우연의 일치였음), `CamDonorSkip`, `QualitySettings.
+  lodBias` 잔재. 당장의 우회법은 "하이드아웃 다녀온 직후엔 쇄빙선 바로 안
+  들어가기"뿐 — 재현 확실한 새 단서 나오면 재조사
