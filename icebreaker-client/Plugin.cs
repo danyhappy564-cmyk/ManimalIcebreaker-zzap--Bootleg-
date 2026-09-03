@@ -324,23 +324,30 @@ namespace Manimal.Icebreaker
             // the F9/F10/F11 tuners and probes, the per-object dumps, and the diagnostic
             // MonoBehaviours that walk the scene every raid.
             // bisect knob for the camera donor graft: component type names to NOT add.
-            // REVERTED TO EMPTY (2026-09, field report): 08/29 defaulted this to skip the
-            // whole AllowGraft set (DesaturateEffect, Antialiasing, Tonemapping,
-            // PerfectCullingCamera) over a transparent-loot-icon bug, without ever isolating
-            // which of the four actually caused it. That trade turned out to have its own
-            // cost: visiting the hideout then loading straight into icebreaker in the same
-            // client session reliably left the map's TAA broken (confirmed jagged edges,
-            // settings still correctly reporting TAA_High) for the rest of that raid on
-            // every repro attempt. Re-enabling the full graft (this config back to "")
-            // fixed it on every retest — Cam2's chassis is missing pieces a real map's
-            // camera has, and with all four holes filled the camera no longer has anything
-            // left over from the hideout to inherit. The transparent-icon bug is UNCHANGED
-            // by this either way (confirmed present both with the graft skipped and with it
-            // restored), so it was never caused by any of these four to begin with — 08/29's
-            // guess was wrong. If a future report needs to bisect a real graft regression,
-            // set this back to the four names above (or a subset) rather than assuming it's
-            // still guilty of the icon bug.
-            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "",
+            // NARROWED TO PerfectCullingCamera ONLY (2026-09, field report): 08/29 defaulted
+            // this to skip the whole AllowGraft set (DesaturateEffect, Antialiasing,
+            // Tonemapping, PerfectCullingCamera) over a transparent-loot-icon bug, without
+            // ever isolating which of the four actually caused it. That trade turned out to
+            // have its own cost: visiting the hideout then loading straight into icebreaker
+            // in the same client session reliably left the map's TAA broken (confirmed
+            // jagged edges, settings still correctly reporting TAA_High) for the rest of
+            // that raid on every repro attempt. Re-enabling the full graft (config "") fixed
+            // that on every retest — Cam2's chassis is missing pieces a real map's camera
+            // has, and with all four holes filled the camera no longer has anything left
+            // over from the hideout to inherit. The transparent-icon bug is UNCHANGED by any
+            // of this (confirmed present with the graft fully skipped, fully restored, and
+            // now with only PerfectCullingCamera skipped), so it was never caused by any of
+            // these four to begin with — 08/29's guess was wrong.
+            // BUT grafting PerfectCullingCamera brought a new, distance-dependent edge/
+            // silhouette artifact that was NOT present before this whole investigation
+            // started (confirmed via commit timestamp against when the player first saw
+            // it) — third-party occlusion culling (Koenigz.PerfectCulling) fighting our own
+            // sidecar culling volumes at range, most likely. Skipping just this one keeps
+            // the TAA fix (DesaturateEffect/Antialiasing/Tonemapping still graft fine on
+            // their own) without the new artifact. If TAA breaks again after a hideout visit
+            // with this set, one of the other three was doing part of the work too — clear
+            // this back to "" first to confirm before assuming a fourth culprit.
+            CamDonorSkip = Config.Bind("Icebreaker", "CamDonorSkip", "PerfectCullingCamera",
                 new ConfigDescription("comma-separated component type names the donor graft must skip (bisecting a bad graft component)",
                     null, new ConfigurationManagerAttributes { IsAdvanced = true }));
             DevMode = Config.Bind("Icebreaker", "DevMode", false,
