@@ -3012,13 +3012,7 @@ namespace Manimal.Icebreaker
             float wantBias = Plugin.LodBiasClamp.Value;
             if (wantBias >= 0f)
             {
-                // bumped to Warning (2026-09, hideout->icebreaker LOD/dither investigation):
-                // this is the ONE place that captures QualitySettings.lodBias as inherited
-                // at raid start, before we stomp it to wantBias below. LogDebug made it
-                // invisible unless a report happened to have BepInEx debug logging on -
-                // exactly the value needed to tell "hideout left lodBias at something odd"
-                // apart from "we clamped it wrong", so it needs to always be in the log.
-                if (_lodBiasOrig < 0f) { _lodBiasOrig = QualitySettings.lodBias; Plugin.Log.LogWarning($"[LOD] bias clamp on (game was {_lodBiasOrig:F2})"); }
+                if (_lodBiasOrig < 0f) { _lodBiasOrig = QualitySettings.lodBias; Plugin.Log.LogDebug($"[LOD] bias clamp on (game was {_lodBiasOrig:F2})"); }
                 if (QualitySettings.lodBias != wantBias) QualitySettings.lodBias = wantBias;
             }
             else if (_lodBiasOrig >= 0f)
@@ -3031,7 +3025,7 @@ namespace Manimal.Icebreaker
             int wantMaxLod = Plugin.MaxLodClamp.Value;
             if (wantMaxLod >= 0)
             {
-                if (_maxLodOrig < 0) { _maxLodOrig = QualitySettings.maximumLODLevel; Plugin.Log.LogWarning($"[LOD] maxLOD clamp on (game was {_maxLodOrig})"); }
+                if (_maxLodOrig < 0) { _maxLodOrig = QualitySettings.maximumLODLevel; Plugin.Log.LogDebug($"[LOD] maxLOD clamp on (game was {_maxLodOrig})"); }
                 if (QualitySettings.maximumLODLevel != wantMaxLod) QualitySettings.maximumLODLevel = wantMaxLod;
             }
             else if (_maxLodOrig >= 0)
