@@ -253,7 +253,7 @@
     {
       "BossChance": 100,
       "BossDifficult": "normal",
-      "BossEscortAmount": "2",
+      "BossEscortAmount": "5",
       "BossEscortDifficult": "normal",
       "BossEscortType": "blackDivIb",
       "BossName": "blackDivIb",
@@ -1046,9 +1046,9 @@
   "DisabledScavExits": "Cellars,Gate 0",
   "EnableCoop": true,
   "Enabled": true,
-  "EscapeTimeLimit": 50,
-  "EscapeTimeLimitCoop": 50,
-  "EscapeTimeLimitPVE": 50,
+  "EscapeTimeLimit": 90,
+  "EscapeTimeLimitCoop": 90,
+  "EscapeTimeLimitPVE": 90,
   "Events": {
     "Halloween2024": {
       "CrowdAttackBlockRadius": 100,
