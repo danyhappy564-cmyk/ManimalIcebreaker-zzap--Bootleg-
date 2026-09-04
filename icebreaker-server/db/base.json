@@ -253,7 +253,7 @@
     {
       "BossChance": 100,
       "BossDifficult": "normal",
-      "BossEscortAmount": "5",
+      "BossEscortAmount": "2",
       "BossEscortDifficult": "normal",
       "BossEscortType": "blackDivIb",
       "BossName": "blackDivIb",
