@@ -1,14 +1,18 @@
-﻿<Project>
+<Project>
   <!-- single source of truth for version + identity, per manimal mod conventions -->
   <PropertyGroup>
-    <ModVersion>0.3.1</ModVersion>
+    <ModVersion>1.0.0</ModVersion>
     <ModGuid>com.manimal.icebreaker</ModGuid>
     <ModUsername>Manimal</ModUsername>
     <ModDisplayName>Icebreaker</ModDisplayName>
-    <!-- overridable per-machine with -p:SPTPath=... / -p:FikaPath=... (or matching
-         environment variables) — these were unconditional (not just defaults) before,
-         so a caller's command-line value was silently discarded -->
-    <SPTPath Condition="'$(SPTPath)' == ''">E:\SPT 4.0.10</SPTPath>
-    <FikaPath Condition="'$(FikaPath)' == ''">D:\SPTDevFika</FikaPath>
+    <!-- fork note: upstream defaults these to its author's D:\SPT41Dev layout. Pointed at
+         this fork's SPT 4.1.5 install instead. All four stay Condition-guarded, so
+         -p:SPTPath=... (or a matching environment variable) still wins on any machine. -->
+    <SPTPath Condition="'$(SPTPath)' == ''">E:\SPT 4.1</SPTPath>
+    <SPTServerPath Condition="'$(SPTServerPath)' == ''">$(SPTPath)\SPT_Runtime</SPTServerPath>
+    <FikaPath Condition="'$(FikaPath)' == ''">D:\SPT41DevFika</FikaPath>
+    <!-- upstream ships this false so a clone never writes into a game install it wasn't
+         told about. This fork builds straight into the install on purpose. -->
+    <DeployToGame Condition="'$(DeployToGame)' == ''">true</DeployToGame>
   </PropertyGroup>
 </Project>
