@@ -1,102 +1,111 @@
 # ManimalIcebreaker (fork)
 
-> 원본: **danauraborealis** — https://github.com/danauraborealis/ManimalIcebreaker (MIT)
+> **원작자 · 원본 레포**
+> **danauraborealis** — https://github.com/danauraborealis/ManimalIcebreaker
 >
-> 이 레포는 원작 포크입니다. 기능을 추가한 게 아니라, 실사용 중 잡은 성능/크래시
-> 수정을 얹어둔 것뿐입니다.
+> **라이선스: MIT**
+>
+> 이 레포는 위 원작의 **포크**입니다. 맵도 에셋도 퀘스트도 전부 원작자의 것이고,
+> 여기서 한 건 실사용 중에 잡힌 성능/크래시 문제를 고쳐서 얹은 것뿐입니다.
+> 기능 추가나 밸런스 변경은 없습니다.
 
-## 업스트림 동기화 (upstream 1.0.0 / SPT 4.1)
-
-업스트림 4.1 마이그레이션을 **머지**로 받았습니다 (덮어쓰기 아님). 업스트림 쪽 변경은
-역난독화 리네임 + 신규 컨텐츠(IcebreakerFinalSquad, IcebreakerSplash,
-IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아래 변경점 목록의
-수정은 하나도 포함돼 있지 않아서 그대로 유지했습니다.
-
-동기화하면서 **없어진 것**:
-
-- 웨지 앰부시 관련 수정 전부 — 업스트림이 `WedgeBrainLayers.cs`를 765줄 → 146줄로
-  줄이면서 커스텀 룸/앰부시/호위대기 전투 레이어를 삭제하고 BD 네이티브 브레인에
-  넘겼습니다. 고치던 코드 자체가 사라졌습니다.
-- HollywoodGraphics Bloom NRE 하네스 가드 — HollywoodGraphics 본체(4.1 포팅본)에서
-  `GraphicsController.Update`가 직접 null 체크하도록 고쳐서 더 이상 필요 없습니다.
-
-ORBIT 호환 패치는 **유지**했습니다. 원래 근거가 "웨지 레이어 생성이 중단된다"였는데,
-`IcebreakerBrainLayers`가 등록하는 IceCrewLayer / IceRushLayer / IceHoldLayer는 그대로
-남아 있어서 같은 BigBrain 생성 루프가 여전히 노출돼 있습니다.
-
-빌드 경로는 `Directory.Build.props`의 `SPTPath` 기본값(`E:\SPT 4.1`)을 쓰고,
-`-p:SPTPath=...`로 덮어쓸 수 있습니다. 업스트림과 달리 `DeployToGame` 기본값이 `true`라
-빌드하면 설치 폴더로 바로 들어갑니다.
-
-## 26/09/07 진단 (SPT 4.1.5 + upstream 1.0.0)
-
-### 군즈(bossKnight) + 로그 2명이 T1에서 안 나오는 이유 — 고침
-
-SPT 4.1이 추가한 `GoonLocationSpawnService`가 원인입니다. 이 서비스는 군즈를 바닐라 맵
-4개(`bigmap`/`woods`/`shoreline`/`lighthouse`) 사이에서 3시간마다 로테이션시키는데,
-리셋 패스가 무조건적입니다:
-
-```csharp
-foreach (var (locationId, location) in allLocations)
-    if (!locationBlacklist.Contains(locationId) && location?.Base?.BossLocationSpawn is not null)
-        foreach (var goonSpawn in location.Base.BossLocationSpawn.Where(x => x.BossName == "bossKnight"))
-            goonSpawn.BossChance = 0;
-```
-
-`hideout`/`develop`을 뺀 **모든** 맵의 `bossKnight` 행이 0%가 되고, 그 다음 위 풀에서
-뽑은 맵 하나만 확률을 돌려받습니다. 쇄빙선의 T1 웨이브가 바로 `bossKnight` 행(기사 +
-exUsec 호위 2명, `BotZoneMash_t1`)인데 `Suburbs`는 풀에도 블랙리스트에도 없어서 0%로
-죽은 채 방치됩니다. 트리거는 정상적으로 울리고(`[Waves] botEvent 'T1' raised`)
-`BossSpawnScenario`가 0% 웨이브를 집어들기 때문에 아무 일도 안 일어납니다.
-
-`IcebreakerGoonGuard`가 `AdjustGoonMapSpawns`에 postfix를 걸어 우리 행의 확률을
-되돌립니다. 이 서비스는 `IOnUpdate`라 타이머로 재실행되므로 로드 시 한 번 고치는 걸로는
-다음 로테이션 창에서 다시 0이 됩니다.
-
-### 서버 모드가 빌드해도 설치 폴더에 안 생기던 이유 — 고침
-
-업스트림 1.0.0이 `DeployToGame` 기본값을 `false`로 두고 `icebreaker-server`의 PostBuild
-타겟 전체를 거기에 걸어놨습니다. 그래서 dll도 db도 복사가 안 됐습니다. 이 포크는 기본값을
-`true`로 두므로 이제 빌드하면 `$(SPTPath)\SPT_Runtime\user\mods\ManimalIcebreaker`에
-**dll + db 전체 + bundles.json**이 덮어써집니다 (번들 2개는 용량 때문에 제외 — 최초 1회
-수동 배치).
-
-경로 자체는 원래도 맞았습니다. 안 만들어진 건 조건 때문이지 경로 때문이 아닙니다.
-
-### 안티앨리어싱 / LOD 거리 흐려짐 — 원인 미확정, 후보 3개
-
-원본 1.0.0 빌드에서도 같은 증상이 나오므로 이 포크의 diff가 원인은 아닙니다. 로그에서
-확인된 것:
-
-1. **`lodBias`가 0.80** — `[LOD] bias clamp on (game was 2.00)`. 이건 모드의
-   `LodBiasClamp` 기본값(0.8f)이 게임의 2.00을 덮어쓴 겁니다. 버그가 아니라 fps 기능인데,
-   `IcebreakerLodCullFloor` 주석에도 적혀 있듯 BSG는 컬 높이를 lodBias >= 2 기준으로
-   저작했습니다. 근거리 보정(실내 19m / 실외 27m) 밖은 전부 2.5배 공격적으로 컬됩니다.
-   → cfg에서 `LodBiasClamp = -1`, `LodCullFloor = -1`이면 리테일 거리로 돌아갑니다.
-2. **`CamDonorSkip`이 비어 있음** — 이 판 로그는
-   `added [UltimateBloom, DesaturateEffect, Antialiasing, Tonemapping, PerfectCullingCamera]`,
-   직전 판 로그는 `added [UltimateBloom]`. BepInEx는 cfg에 이미 저장된 값을 코드 기본값보다
-   우선하므로 4.0 시절 빈 값이 그대로 살아 있습니다. 지금은 레거시 `Antialiasing` 이미지
-   이펙트가 `PostProcessLayer`의 TAA 위에 얹혀 있는 상태입니다.
-   → cfg를 `CamDonorSkip = DesaturateEffect,Antialiasing,Tonemapping,PerfectCullingCamera`로.
-3. **PiP-Disabler 1.5.0이 새로 설치됨** — 직전 판 로그에는 없던 모드입니다.
-   `CameraLodBiasController.SetBiasByFov`에 prefix를 걸어 EFT 자체의 FOV 기반 LOD 바이어스
-   조정을 통째로 스킵합니다. 카메라 부검 결과 `SSAA.UseJitter=False`,
-   `_opticLensRenderer=null`, `_collimatorRenderer=null`.
-
-셋 다 로그로 확인된 사실이고, 어느 것이 증상의 원인인지는 아직 못 갈랐습니다.
-1 → 2 → 3 순서로 하나씩 되돌리면서 확인하는 게 가장 빠릅니다.
-
-### 그 밖에 로그에 남은 실제 오류
-
-- `[T4Squad] whole squad deferred: T4 profile preparation did not produce five ready bots`
-  / `T4 has only 1/5 safe, separated spawn positions` — 업스트림 1.0.0이 새로 넣은
-  `IcebreakerFinalSquad`는 T4에 5개의 분리된 스폰 지점을 요구하는데, `BotZoneInside_t4`의
-  마커는 2개뿐입니다(`markers=2`). 결과적으로 `[T4Squad] active 1/5`. 업스트림 쪽 문제.
-- `ORBIT's hook OrbitInitPatch.Postfix threw ... key 'Suburbs' not present` — 알려진
-  ORBIT 문제, `RaidFirewall`이 삼키고 있고 `OrbitBrainLayerCompat`가 뒤처리 중입니다.
+현재 기준: **upstream 1.0.0 / SPT 4.1.5**
 
 ---
+
+## 이 포크가 원작과 다른 점
+
+원작 1.0.0의 SPT 4.1 마이그레이션은 **머지로 받았습니다** (덮어쓰기 아님). 원작 쪽
+변경은 역난독화 리네임과 신규 컨텐츠(IcebreakerFinalSquad, IcebreakerSplash,
+IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아래 수정들은
+원작에 들어있지 않아서 그대로 유지했습니다.
+
+**성능**
+
+| 수정 | 증상 |
+|---|---|
+| `BuildDistanceCuller` 프레임 분산 | 라이드 시작 시 씬 전체 148000+ 렌더러를 한 프레임에 동기 스캔 |
+| 봇 폴링에서 `FindObjectsOfType` 제거 | `HoldEngineSquad`/`C3KeycardSweep`/`PlaceChargeSweep`/`PlaceWedgeTag`/`UnstackPatrol`이 매 주기 씬 전체를 훑으며 ~55ms 스파이크 |
+| 렌즈 플레어 노드당 Dictionary 할당 제거 | 라이드 시작 시 17.9초짜리 프레임 하나 |
+| LOD 컬 플로어 재계산 프레임 예산제 | 갑판 올라갈 때 프레임 처짐 |
+| `AICorePoint` 월드 단위 캐싱 | 봇 스폰마다 54ms 재탐색 |
+
+**크래시 / 버그**
+
+| 수정 | 증상 |
+|---|---|
+| `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
+| `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
+| `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
+| onIce 디바운스 + off-ice 정착 가드 | 쇄빙선 나간 뒤 다른 맵에서 쇄빙선 로직이 계속 돎 |
+| `PatrolScanner` 좁은 방 폴백 | 좁은 구역에서 봇이 그 자리에 못 박힘 |
+| `OrbitBrainLayerCompat` | ORBIT이 `Suburbs`를 몰라서 던지는 예외가 우리 AI 레이어 생성까지 같이 죽임 |
+| `base.json` 중복 `BossLocationSpawn` 7개 제거 | 같은 스쿼드가 트리거마다 두 번씩 스폰 (라이드당 봇 29마리 여분) |
+
+**설정 차이**
+
+- `EscapeTimeLimit` 90분 (원작 50분)
+- `DeployToGame` 기본값 `true` (원작 `false`)
+
+---
+
+## 빌드 / 설치
+
+```
+dotnet build ManimalIcebreaker.sln
+```
+
+경로는 `Directory.Build.props`에서 나옵니다. 기본값은 `SPTPath = E:\SPT 4.1`이고,
+`-p:SPTPath=...` 또는 동명의 환경변수로 덮어쓸 수 있습니다.
+
+빌드하면 자동으로 아래에 배포됩니다:
+
+| 대상 | 내용 |
+|---|---|
+| `$(SPTPath)\BepInEx\plugins\ManimalIcebreaker\` | 클라이언트 dll |
+| `$(SPTPath)\SPT_Runtime\user\mods\ManimalIcebreaker\` | 서버 dll + **`db/` 전체** + `bundles.json` |
+
+**주의**: 서버 쪽은 `db/` 전체를 덮어씁니다. 설치 폴더에서 직접 수정한 json이 있으면
+날아갑니다. 반대로, 레포에서 `base.json`을 고쳤는데 인게임에 반영이 안 된다면 빌드가
+배포까지 갔는지부터 확인하세요.
+
+씬 번들 2개(615MB scenes + preset)는 용량 때문에 매 빌드 복사 대상이 아닙니다.
+최초 1회 수동 배치하거나 `package-release.ps1`을 쓰세요.
+
+배포를 끄려면 `-p:DeployToGame=false`.
+
+---
+
+## 알려진 문제
+
+**안티앨리어싱 / LOD 거리 흐려짐 (미해결)**
+
+같은 클라이언트 세션에서 재현되며, **원작 1.0.0 빌드에서도 동일하게 발생합니다** —
+이 포크의 diff가 원인이 아닙니다. SPT 4.0.10 시절에는 하이드아웃을 다녀온 뒤에만
+터졌는데, 4.1.5에서는 바로 라이드에 들어가도 터집니다.
+
+09/03 조사에서 제외 확인된 것: TargetDummies, HideoutShootout, BetterVision,
+Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade 잔재,
+`ScopeZoomHandler` NRE, `CamDonorSkip`, `QualitySettings.lodBias` 잔재.
+자세한 경위는 아래 `<26/09/03 상세 변경점>` 참고.
+
+**T4 스쿼드가 1/5만 스폰됨 (원작 쪽 문제)**
+
+```
+[T4Squad] whole squad deferred: T4 has only 1/5 safe, separated spawn positions
+[T4Squad] active 1/5
+```
+
+원작 1.0.0이 새로 넣은 `IcebreakerFinalSquad`는 T4에 분리된 스폰 지점 5개를
+요구하는데, `BotZoneInside_t4`의 마커는 2개뿐입니다 (`markers=2`).
+
+**루팅 아이템 아이콘 반투명 (미해결)**
+
+`CamDonorSkip`과 무관한 것으로 09/03에 확인됨. 별도 조사 필요.
+
+---
+
+## 변경점
 
 <26/08/29 상세 변경점>
 
@@ -290,3 +299,58 @@ exUsec 호위 2명, `BotZoneMash_t1`)인데 `Suburbs`는 풀에도 블랙리스�
   잔재, `ScopeZoomHandler` NRE(우연의 일치였음), `CamDonorSkip`, `QualitySettings.
   lodBias` 잔재. 당장의 우회법은 "하이드아웃 다녀온 직후엔 쇄빙선 바로 안
   들어가기"뿐 — 재현 확실한 새 단서 나오면 재조사
+
+---
+
+<26/09/07 상세 변경점>
+
+- SPT 4.1.5 / 원작 1.0.0으로 이동. 원작의 4.1 마이그레이션을 **머지**로 받음(GitHub
+  "Sync fork → Discard commits"를 쓰면 이 포크의 성능/크래시 수정이 전부 날아감).
+  충돌은 4개뿐이었고, 나머지는 이쪽 수정과 원작의 리네임이 서로 다른 hunk라 자동
+  머지됨. `WedgeBrainLayers.cs`는 원작 것을 통째로 채택 — 원작이 765줄에서 146줄로
+  줄이면서 커스텀 룸/앰부시/호위대기 전투 레이어를 삭제하고 BD 네이티브 브레인에
+  넘겼기 때문에, 08/30에 고쳤던 웨지 앰부시 관련 수정들은 고치던 코드 자체가 사라짐
+
+- HollywoodGraphics Bloom NRE 방어 패치 제거 — HollywoodGraphics 4.1 포팅본이
+  `GraphicsController.Update`에서 직접 null 체크하도록 고쳐져서 이제 중복. 매 프레임
+  리플렉션 필드 읽기만 하고 있었음
+
+- **문 따고 진입 후 군즈(bossKnight) + 로그 2명이 안 나오던 문제 — 원인 확정, 수정.**
+  모드 문제가 아니라 SPT 4.1이 새로 추가한 `GoonLocationSpawnService`가 원인이었음.
+  이 서비스는 군즈를 바닐라 맵 4개(`bigmap`/`woods`/`shoreline`/`lighthouse`) 사이에서
+  3시간마다 로테이션시키는데, 리셋 패스가 무조건적임 — `hideout`/`develop`을 뺀 **모든**
+  맵의 `bossKnight` 행을 `BossChance = 0`으로 만든 뒤, 위 풀에서 뽑은 맵 하나만 확률을
+  돌려받음. 쇄빙선 T1이 바로 그 `bossKnight` 행(기사 + exUsec 호위 2명, `BotZoneMash_t1`)
+  인데 `Suburbs`는 풀에도 블랙리스트에도 없어서 0%로 죽은 채 방치됨. 로그가 정확히 그
+  모양이었음 — `[Waves] botEvent 'T1' raised t=1044s`로 트리거는 정상적으로 울리는데
+  아무것도 안 나오고, 같은 판의 `hides0`/`stern0`/`T3`/`wedges1`(blackDivIb/bossWedge)은
+  전부 정상 딜리버리. **그 판에서 실패한 웨이브는 유일한 bossKnight 웨이브 하나뿐이었음**.
+  `IcebreakerGoonGuard`가 `AdjustGoonMapSpawns`에 postfix를 걸어 우리 행의 확률을
+  되돌림 — 이 서비스가 `IOnUpdate`(5초 루프, 로테이션 창마다 실제 실행)라서 로드 시
+  한 번 고치는 걸로는 다음 창에서 다시 0이 됨. 확률은 하드코딩이 아니라 로드 시점
+  스냅샷에서 가져오므로 `base.json`에서 값을 바꿔도 그대로 먹힘
+
+- **빌드해도 서버 모드가 설치 폴더에 안 생기던 문제 — 원인 확정, 수정.** 경로는 원래도
+  맞았음(`$(SPTServerPath)\user\mods\ManimalIcebreaker`). 원작 1.0.0이 `DeployToGame`
+  기본값을 `false`로 두고 `icebreaker-server`의 PostBuild 타겟 **전체**를 거기에 걸어놔서
+  dll도 db도 복사가 안 되고 있었음. 이 포크는 기본값을 `true`로 되돌림.
+  **부작용으로 그동안 `base.json` 편집이 하나도 반영되지 않고 있었음** — 중복 스폰 7개
+  제거도, 90분도, `BossEscortAmount` 조정도 전부. 설치돼 있던 건 릴리스 zip의 원본
+
+- 안티앨리어싱/LOD 흐려짐은 이번에도 원인 특정 실패. 로그에서 확인된 사실 세 가지:
+  (1) `[LOD] bias clamp on (game was 2.00)` — 모드의 `LodBiasClamp` 기본값 0.8이 게임의
+  2.00을 덮어씀. `IcebreakerLodCullFloor` 주석대로 BSG는 컬 높이를 lodBias ≥ 2 기준으로
+  저작했으므로 근거리 보정(실내 19m/실외 27m) 밖은 2.5배 공격적으로 컬됨.
+  (2) 이번 판은 `CamDonorSkip`이 빈 값이라 그래프트가
+  `[UltimateBloom, DesaturateEffect, Antialiasing, Tonemapping, PerfectCullingCamera]`
+  전부를 얹었음(직전 판은 `[UltimateBloom]`만) — BepInEx가 cfg 저장값을 코드 기본값보다
+  우선하기 때문. (3) 직전 판에 없던 PiP-Disabler 1.5.0이 새로 설치됐고,
+  `CameraLodBiasController.SetBiasByFov`에 prefix를 걸어 EFT 자체의 FOV 기반 LOD
+  바이어스 조정을 통째로 스킵함. 다만 (1)(2)(3) 모두 09/03 조사에서 이미 "증상과 무관"
+  으로 한 번씩 걸러진 것들이고, 카메라 부검의 `SSAA.UseJitter=False`도 두 판 로그에서
+  동일하게 나와서 변수로 쓸 수 없음. 원작 1.0.0 빌드에서도 동일 재현되므로 이 포크의
+  코드 문제는 아닌 것으로 확인
+
+- 결과: 군즈 T1 스폰 정상화 확인, 서버 모드 자동 배포 정상화 확인. `icebreaker-server`는
+  실제 SPT 4.1.5 패키지로 빌드 검증(에러 0). AA/LOD와 루팅 아이콘 반투명은 미해결로
+  남음. 새로 확인된 원작 쪽 문제로 T4 스쿼드 스폰 지점 부족(`markers=2` vs 필요 5)
