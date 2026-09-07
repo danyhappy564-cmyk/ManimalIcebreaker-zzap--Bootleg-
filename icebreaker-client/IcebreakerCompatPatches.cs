@@ -417,9 +417,12 @@ namespace Manimal.Icebreaker
     //   OrbitBrainLayer..ctor -> Activator.CreateInstance -> CustomLayerWrapper..ctor
     //   -> BotBaseBrainActivatePatch.PatchPrefix
     // BigBrain builds a bot's registered custom layers in one pass with no per-layer
-    // isolation, so ORBIT's throw there aborts whatever of OUR OWN layers (WedgeRooms/
-    // WedgeAmbush/IceCrewHold) were still queued after it for THAT bot — leaving him
-    // with no combat behavior at all, not even vanilla's. ORBIT already has a clean
+    // isolation, so ORBIT's throw there aborts whatever of OUR OWN layers were still
+    // queued after it for THAT bot — leaving him with no combat behavior at all, not
+    // even vanilla's. (Upstream 1.0.0 deleted the WedgeRooms/WedgeAmbush layers this was
+    // first written for, but IcebreakerBrainLayers still registers IceCrewLayer,
+    // IceRushLayer and IceHoldLayer, so the same construction loop is still exposed.)
+    // ORBIT already has a clean
     // "do nothing" path for bots it wants to ignore (IsExcludedRole -> _excluded=true,
     // gates its own IsActive() to false and skips the OrbitManager/event-subscription
     // work entirely) — this patch just routes our map into that same path instead of
@@ -458,55 +461,6 @@ namespace Manimal.Icebreaker
             if (!IceGate.On) return true;
             try { _excludedField.SetValue(__instance, true); } catch { }
             return false; // skip ORBIT's own body — no OrbitManager singleton lookup, no NRE
-        }
-    }
-
-    // HOLLYWOODGRAPHICS BLOOM NRE, EVERY FRAME (user-verified fix from an earlier
-    // decompiled-source pass, ported here as a Harmony guard since we don't carry that
-    // mod's source): HollywoodGraphics.Components.Bloom's constructor does
-    // `camera.gameObject.AddComponent<UltimateBloom>()` then immediately reads
-    // `_ultimateBloom.m_BloomIntensities.Length` in ResetIntensities — before
-    // UltimateBloom's own Start() has ever run, so that array is still null. On our
-    // Cam2 fallback (no retail UltimateBloom prefab wiring) this NREs every time,
-    // which means `GraphicsController._bloom = new Bloom()` never completes and
-    // `_bloom` stays null — and GraphicsController.Update() calls `_bloom.Update()`
-    // unconditionally, so it NREs AGAIN, every single frame, for the rest of the raid
-    // (an uncaught exception thrown and logged every frame is a real, continuous
-    // frame-time tax, separate from the one-shot stutter the dead-effect guard already
-    // works around). Global, not IceGate-gated: the bug is in HollywoodGraphics' own
-    // null-safety, not specific to our map — vanilla cameras just don't hit it because
-    // they ship a working UltimateBloom already configured.
-    internal static class HollywoodGraphicsBloomCompat
-    {
-        private static bool _attempted;
-        private static System.Reflection.FieldInfo _bloomField;
-
-        internal static void TryPatch(Harmony harmony)
-        {
-            if (_attempted) return;
-            _attempted = true;
-            try
-            {
-                var t = AccessTools.TypeByName("HollywoodGraphics.GraphicsController");
-                if (t == null) return; // HollywoodGraphics not installed
-                var update = AccessTools.Method(t, "Update");
-                _bloomField = AccessTools.Field(t, "_bloom");
-                if (update == null || _bloomField == null)
-                {
-                    Plugin.Log.LogWarning("[HGCompat] GraphicsController shape changed (Update/_bloom not found) — skipping");
-                    return;
-                }
-                harmony.Patch(update, prefix: new HarmonyMethod(typeof(HollywoodGraphicsBloomCompat), nameof(Prefix)));
-                Plugin.Log.LogInfo("[HGCompat] guarded HollywoodGraphics.GraphicsController.Update against a null "
-                    + "Bloom (its own ctor NREs when AddComponent<UltimateBloom> hasn't run Start() yet)");
-            }
-            catch (Exception e) { Plugin.Log.LogWarning($"[HGCompat] patch failed: {e.Message}"); }
-        }
-
-        private static bool Prefix(object __instance)
-        {
-            try { return _bloomField.GetValue(__instance) != null; } // skip original if _bloom is null
-            catch { return true; }
         }
     }
 }
