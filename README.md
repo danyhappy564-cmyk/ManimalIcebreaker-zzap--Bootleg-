@@ -28,6 +28,74 @@ ORBIT 호환 패치는 **유지**했습니다. 원래 근거가 "웨지 레이�
 `-p:SPTPath=...`로 덮어쓸 수 있습니다. 업스트림과 달리 `DeployToGame` 기본값이 `true`라
 빌드하면 설치 폴더로 바로 들어갑니다.
 
+## 26/09/07 진단 (SPT 4.1.5 + upstream 1.0.0)
+
+### 군즈(bossKnight) + 로그 2명이 T1에서 안 나오는 이유 — 고침
+
+SPT 4.1이 추가한 `GoonLocationSpawnService`가 원인입니다. 이 서비스는 군즈를 바닐라 맵
+4개(`bigmap`/`woods`/`shoreline`/`lighthouse`) 사이에서 3시간마다 로테이션시키는데,
+리셋 패스가 무조건적입니다:
+
+```csharp
+foreach (var (locationId, location) in allLocations)
+    if (!locationBlacklist.Contains(locationId) && location?.Base?.BossLocationSpawn is not null)
+        foreach (var goonSpawn in location.Base.BossLocationSpawn.Where(x => x.BossName == "bossKnight"))
+            goonSpawn.BossChance = 0;
+```
+
+`hideout`/`develop`을 뺀 **모든** 맵의 `bossKnight` 행이 0%가 되고, 그 다음 위 풀에서
+뽑은 맵 하나만 확률을 돌려받습니다. 쇄빙선의 T1 웨이브가 바로 `bossKnight` 행(기사 +
+exUsec 호위 2명, `BotZoneMash_t1`)인데 `Suburbs`는 풀에도 블랙리스트에도 없어서 0%로
+죽은 채 방치됩니다. 트리거는 정상적으로 울리고(`[Waves] botEvent 'T1' raised`)
+`BossSpawnScenario`가 0% 웨이브를 집어들기 때문에 아무 일도 안 일어납니다.
+
+`IcebreakerGoonGuard`가 `AdjustGoonMapSpawns`에 postfix를 걸어 우리 행의 확률을
+되돌립니다. 이 서비스는 `IOnUpdate`라 타이머로 재실행되므로 로드 시 한 번 고치는 걸로는
+다음 로테이션 창에서 다시 0이 됩니다.
+
+### 서버 모드가 빌드해도 설치 폴더에 안 생기던 이유 — 고침
+
+업스트림 1.0.0이 `DeployToGame` 기본값을 `false`로 두고 `icebreaker-server`의 PostBuild
+타겟 전체를 거기에 걸어놨습니다. 그래서 dll도 db도 복사가 안 됐습니다. 이 포크는 기본값을
+`true`로 두므로 이제 빌드하면 `$(SPTPath)\SPT_Runtime\user\mods\ManimalIcebreaker`에
+**dll + db 전체 + bundles.json**이 덮어써집니다 (번들 2개는 용량 때문에 제외 — 최초 1회
+수동 배치).
+
+경로 자체는 원래도 맞았습니다. 안 만들어진 건 조건 때문이지 경로 때문이 아닙니다.
+
+### 안티앨리어싱 / LOD 거리 흐려짐 — 원인 미확정, 후보 3개
+
+원본 1.0.0 빌드에서도 같은 증상이 나오므로 이 포크의 diff가 원인은 아닙니다. 로그에서
+확인된 것:
+
+1. **`lodBias`가 0.80** — `[LOD] bias clamp on (game was 2.00)`. 이건 모드의
+   `LodBiasClamp` 기본값(0.8f)이 게임의 2.00을 덮어쓴 겁니다. 버그가 아니라 fps 기능인데,
+   `IcebreakerLodCullFloor` 주석에도 적혀 있듯 BSG는 컬 높이를 lodBias >= 2 기준으로
+   저작했습니다. 근거리 보정(실내 19m / 실외 27m) 밖은 전부 2.5배 공격적으로 컬됩니다.
+   → cfg에서 `LodBiasClamp = -1`, `LodCullFloor = -1`이면 리테일 거리로 돌아갑니다.
+2. **`CamDonorSkip`이 비어 있음** — 이 판 로그는
+   `added [UltimateBloom, DesaturateEffect, Antialiasing, Tonemapping, PerfectCullingCamera]`,
+   직전 판 로그는 `added [UltimateBloom]`. BepInEx는 cfg에 이미 저장된 값을 코드 기본값보다
+   우선하므로 4.0 시절 빈 값이 그대로 살아 있습니다. 지금은 레거시 `Antialiasing` 이미지
+   이펙트가 `PostProcessLayer`의 TAA 위에 얹혀 있는 상태입니다.
+   → cfg를 `CamDonorSkip = DesaturateEffect,Antialiasing,Tonemapping,PerfectCullingCamera`로.
+3. **PiP-Disabler 1.5.0이 새로 설치됨** — 직전 판 로그에는 없던 모드입니다.
+   `CameraLodBiasController.SetBiasByFov`에 prefix를 걸어 EFT 자체의 FOV 기반 LOD 바이어스
+   조정을 통째로 스킵합니다. 카메라 부검 결과 `SSAA.UseJitter=False`,
+   `_opticLensRenderer=null`, `_collimatorRenderer=null`.
+
+셋 다 로그로 확인된 사실이고, 어느 것이 증상의 원인인지는 아직 못 갈랐습니다.
+1 → 2 → 3 순서로 하나씩 되돌리면서 확인하는 게 가장 빠릅니다.
+
+### 그 밖에 로그에 남은 실제 오류
+
+- `[T4Squad] whole squad deferred: T4 profile preparation did not produce five ready bots`
+  / `T4 has only 1/5 safe, separated spawn positions` — 업스트림 1.0.0이 새로 넣은
+  `IcebreakerFinalSquad`는 T4에 5개의 분리된 스폰 지점을 요구하는데, `BotZoneInside_t4`의
+  마커는 2개뿐입니다(`markers=2`). 결과적으로 `[T4Squad] active 1/5`. 업스트림 쪽 문제.
+- `ORBIT's hook OrbitInitPatch.Postfix threw ... key 'Suburbs' not present` — 알려진
+  ORBIT 문제, `RaidFirewall`이 삼키고 있고 `OrbitBrainLayerCompat`가 뒤처리 중입니다.
+
 ---
 
 <26/08/29 상세 변경점>
