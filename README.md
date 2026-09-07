@@ -1,3 +1,35 @@
+# ManimalIcebreaker (fork)
+
+> 원본: **danauraborealis** — https://github.com/danauraborealis/ManimalIcebreaker (MIT)
+>
+> 이 레포는 원작 포크입니다. 기능을 추가한 게 아니라, 실사용 중 잡은 성능/크래시
+> 수정을 얹어둔 것뿐입니다.
+
+## 업스트림 동기화 (upstream 1.0.0 / SPT 4.1)
+
+업스트림 4.1 마이그레이션을 **머지**로 받았습니다 (덮어쓰기 아님). 업스트림 쪽 변경은
+역난독화 리네임 + 신규 컨텐츠(IcebreakerFinalSquad, IcebreakerSplash,
+IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아래 변경점 목록의
+수정은 하나도 포함돼 있지 않아서 그대로 유지했습니다.
+
+동기화하면서 **없어진 것**:
+
+- 웨지 앰부시 관련 수정 전부 — 업스트림이 `WedgeBrainLayers.cs`를 765줄 → 146줄로
+  줄이면서 커스텀 룸/앰부시/호위대기 전투 레이어를 삭제하고 BD 네이티브 브레인에
+  넘겼습니다. 고치던 코드 자체가 사라졌습니다.
+- HollywoodGraphics Bloom NRE 하네스 가드 — HollywoodGraphics 본체(4.1 포팅본)에서
+  `GraphicsController.Update`가 직접 null 체크하도록 고쳐서 더 이상 필요 없습니다.
+
+ORBIT 호환 패치는 **유지**했습니다. 원래 근거가 "웨지 레이어 생성이 중단된다"였는데,
+`IcebreakerBrainLayers`가 등록하는 IceCrewLayer / IceRushLayer / IceHoldLayer는 그대로
+남아 있어서 같은 BigBrain 생성 루프가 여전히 노출돼 있습니다.
+
+빌드 경로는 `Directory.Build.props`의 `SPTPath` 기본값(`E:\SPT 4.1`)을 쓰고,
+`-p:SPTPath=...`로 덮어쓸 수 있습니다. 업스트림과 달리 `DeployToGame` 기본값이 `true`라
+빌드하면 설치 폴더로 바로 들어갑니다.
+
+---
+
 <26/08/29 상세 변경점>
 
 - 배 탑승/계단 구간 스터터링: LOD 컬 플로어 재계산을 프레임당 예산제로 분산 처리
