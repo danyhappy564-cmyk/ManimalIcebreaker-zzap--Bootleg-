@@ -41,14 +41,20 @@ namespace Manimal.Icebreaker
         // raise these and BSG's BossSpawnScenario acts on them, so this line is the only
         // proof of "which wave fired and when" — it turned a player's "guys spawned in
         // the wrong place" report into a five-second grep (08-09).
+        // every raised id this raid, from EVERY source (authored box, our group-size logic,
+        // the backstop). IcebreakerWaveBackstop reads it to know which waves still have not
+        // been triggered — BossSpawnScenario's own Activated flag is not reachable from here.
+        internal static readonly HashSet<string> Raised = new HashSet<string>();
+
         [HarmonyPatch(typeof(GlobalEventDispatcher), nameof(GlobalEventDispatcher.AnyEvent), new[] { typeof(string) })]
         internal static class Patch_LogAnyEvent
         {
             [HarmonyPostfix]
             private static void Postfix(string eventId)
             {
-                if (IceGate.On)
-                    Plugin.Log.LogWarning($"[Waves] botEvent '{eventId}' raised t={UnityEngine.Time.timeSinceLevelLoad:F0}s");
+                if (!IceGate.On) return;
+                if (!string.IsNullOrEmpty(eventId)) Raised.Add(eventId);
+                Plugin.Log.LogWarning($"[Waves] botEvent '{eventId}' raised t={UnityEngine.Time.timeSinceLevelLoad:F0}s");
             }
         }
 
@@ -92,6 +98,11 @@ namespace Manimal.Icebreaker
             if (_marker != null) return;
             var sc = Sidecar();
             if (sc == null || !IcebreakerAcoustics.IcebreakerLoaded()) return;
+
+            // Cleared HERE, not from IcebreakerCrew.Start: this runs off BotsController.Init
+            // before any trigger exists to raise anything, whereas Crew's Start can land
+            // after the first raise and would erase it.
+            Raised.Clear();
 
             try
             {

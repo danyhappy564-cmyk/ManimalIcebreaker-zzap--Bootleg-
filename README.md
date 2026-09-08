@@ -35,6 +35,8 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 | 수정 | 증상 |
 |---|---|
 | `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
+| `IcebreakerWaveBackstop` (신규, 09/08) | 엔진룸·선미 트리거 박스를 우회하면 그 구역이 통째로 비어 있다가 한참 뒤에 스폰됨 |
+| T4 스폰 지점 폴백 (09/08) | 시야 밖 지점 5개를 못 찾으면 스쿼드 전체를 미뤄서 앰부시가 늦게 도착 |
 | `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
 | `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
 | onIce 디바운스 + off-ice 정착 가드 | 쇄빙선 나간 뒤 다른 맵에서 쇄빙선 로직이 계속 돎 |
@@ -89,15 +91,57 @@ Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade �
 `ScopeZoomHandler` NRE, `CamDonorSkip`, `QualitySettings.lodBias` 잔재.
 자세한 경위는 아래 `<26/09/03 상세 변경점>` 참고.
 
-**T4 스쿼드가 1/5만 스폰됨 (원작 쪽 문제)**
+**T4 스쿼드가 1/5만 스폰됨 (09/08 완화)**
 
 ```
 [T4Squad] whole squad deferred: T4 has only 1/5 safe, separated spawn positions
-[T4Squad] active 1/5
 ```
 
 원작 1.0.0이 새로 넣은 `IcebreakerFinalSquad`는 T4에 분리된 스폰 지점 5개를
-요구하는데, `BotZoneInside_t4`의 마커는 2개뿐입니다 (`markers=2`).
+요구하는데, `BotZoneInside_t4`의 마커는 2개뿐입니다 (`markers=2`). 원작은 마커 주변
+반경 5.4m를 훑어 나머지를 만들어내지만, **플레이어 시야에 걸리는 지점을 전부 버립니다.**
+그래서 플레이어가 그 방을 볼 수 있는 위치에 있으면 후보가 1개까지 떨어지고, 스쿼드
+전체가 `DelayBossSpawn` 으로 미뤄집니다 — 09/07 로그에서 3번 연기된 뒤에야 5/5로
+붙었고, 그때는 플레이어가 이미 그 구간을 지나간 뒤였습니다.
+
+이 포크는 **시야 밖 지점을 여전히 우선하되 필수 조건에서는 뺐습니다.** 5개가 안 나오면
+사람에게서 가장 먼 지점들로 채우고(8m 이내는 계속 거부), 스쿼드를 미루지 않습니다.
+숨어서 나오는 게 최선이지만, 늦게 오는 스쿼드가 보이는 스쿼드보다 나쁩니다.
+
+**엔진룸 / 헬리패드 스폰 타이밍 (09/08 수정)**
+
+블랙디비전 웨이브는 전부 `base.json` 에 `Time: 9999` + `TriggerName: botEvent` 로
+들어있어서, **오직 플레이어가 트리거 박스를 지나야만** 스폰됩니다. 그리고 박스는
+스쿼드가 배치되는 곳에서 한참 떨어져 있습니다:
+
+| 트리거 | 박스 위치 | 스쿼드가 뜨는 곳 | 거리 |
+|---|---|---|---|
+| `hides*` (엔진룸) | z=+59, y=20 (선수 상부구조) | `BotZoneEngineHide` z=-21 | **80m** |
+| `stern*` (헬리패드/그 아래) | z=+2 (중앙부) | `BotZoneSternTop` z=-67, `BotZoneStern` z=-71 | **69~73m** |
+
+"미리 자리를 잡고 있다"는 연출 의도지만, **박스를 안 밟는 경로로 가면 그 구역이
+통째로 비어 있습니다.** 로그가 그대로 보여줍니다 — 같은 hides 박스가 한 판은 t=43s에,
+다음 판은 **t=1032s(17분)** 에 밟혔습니다. 박스는 하나뿐이고, 엔진룸은 그 박스를 안
+거치고도 갈 수 있습니다. 그래서 "멀리까지 진행하고 나서야 뒤늦게 스폰"이 됩니다.
+
+`IcebreakerWaveBackstop` 이 박스를 거리로 받쳐줍니다. 사람이 어떤 스쿼드의 스폰
+마커 **40m 안**까지 접근했는데 그 트리거가 아직 안 떴으면, 박스가 부르는 것과 똑같은
+`GlobalEventDispatcher.AnyEvent` 를 대신 불러서 BSG 웨이브 파이프라인이 정상 경로로
+배치하게 합니다. 박스가 제대로 밟히는 판에서는 이미 이벤트가 떠 있으므로 아무 일도
+하지 않습니다.
+
+- 40m인 이유: 어떤 플레이어 시작 지점에서든 가장 가까운 해당 존까지 **104m(엔진룸) /
+  156m(선미)** 라, 라이드 시작부터 걸릴 일이 없습니다
+- 엔진룸/선미 **두 개만** 받칩니다. 웨지 박스는 자기가 채우는 방 안(4~16m)에 있고,
+  T1/T3/T4 박스는 필수 동선의 티어 진행 게이트라 거리로 받치면 오히려 원작보다
+  **빨리** 터져서 연출 순서가 흐트러집니다
+
+로그:
+
+```
+[WaveBackstop] engine room: a player got within 39m of the spawn markers
+               and the authored trigger never fired - raising 'hides0' (group=1)
+```
 
 **루팅 아이템 아이콘 반투명 (미해결)**
 

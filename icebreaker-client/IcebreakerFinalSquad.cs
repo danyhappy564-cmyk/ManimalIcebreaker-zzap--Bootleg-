@@ -109,6 +109,15 @@ namespace Manimal.Icebreaker
             }
         }
 
+        // Out-of-sight positions are preferred but not required. Requiring them threw the
+        // whole squad back into DelayBossSpawn whenever the player happened to be standing
+        // where they could see the room ("T4 has only 1/5 safe, separated spawn positions"
+        // in the 09-07 log), and the retry loop then delivered the ambush a good while
+        // after the player had walked through it. A hidden spawn is better; a late squad is
+        // worse than a visible one, so short of five we top up with the positions furthest
+        // from anyone, and only refuse the ones close enough to appear in someone's face.
+        private const float VisibleSpawnMinDistSqr = 64f; // 8m
+
         private static List<ISpawnPoint> PickPositions(BotZone zone, int count)
         {
             var result = new List<ISpawnPoint>();
@@ -119,6 +128,7 @@ namespace Manimal.Icebreaker
             FikaBridge.CollectHumans(humans);
             var living = UnityEngine.Object.FindObjectsOfType<BotOwner>();
             int sightMask = LayerMask.GetMask("HighPolyCollider", "Terrain");
+            var visible = new List<KeyValuePair<float, ISpawnPoint>>(); // fallback, by distance
             // The authored T4 zone has only TWO markers. Add nearby positions on
             // the same deck, reachable in a straight line on the baked NavMesh.
             for (int ring = 0; ring <= 3; ring++)
@@ -133,18 +143,46 @@ namespace Manimal.Icebreaker
                 if (Mathf.Abs(position.y - seed.Position.y) > 0.75f ||
                     NavMesh.Raycast(anchor.position, position, out _, NavMesh.AllAreas)) continue;
                 if (result.Any(p => (p.Position - position).sqrMagnitude < 2.25f)) continue;
+                if (visible.Any(p => (p.Value.Position - position).sqrMagnitude < 2.25f)) continue;
                 if (living.Any(b => b != null && !b.IsDead && (b.Position - position).sqrMagnitude < 2.25f)) continue;
+
+                float nearestHuman = float.MaxValue;
+                foreach (var h in humans)
+                {
+                    float d = (h.Position - position).sqrMagnitude;
+                    if (d < nearestHuman) nearestHuman = d;
+                }
                 bool exposed = humans.Any(h => (h.Position - position).sqrMagnitude < 9f ||
                     !Physics.Linecast(h.Position + Vector3.up * 1.5f, position + Vector3.up * 1.5f,
                         sightMask, QueryTriggerInteraction.Ignore));
-                if (exposed) continue;
-                result.Add(new SpawnPoint
+
+                var point = new SpawnPoint
                 {
-                    Id = seed.Id + "-t4-" + result.Count, Name = "Icebreaker T4 squad",
+                    Id = seed.Id + "-t4-" + (result.Count + visible.Count), Name = "Icebreaker T4 squad",
                     Position = position, Rotation = seed.Rotation, CorePointId = seed.CorePointId,
                     BotZone = zone, Sides = seed.Sides, Categories = seed.Categories
-                });
-                if (result.Count == count) return result;
+                };
+                if (!exposed)
+                {
+                    result.Add(point);
+                    if (result.Count == count) return result;
+                }
+                else if (nearestHuman >= VisibleSpawnMinDistSqr)
+                {
+                    visible.Add(new KeyValuePair<float, ISpawnPoint>(nearestHuman, point));
+                }
+            }
+
+            if (result.Count < count && visible.Count > 0)
+            {
+                int hidden = result.Count;
+                foreach (var v in visible.OrderByDescending(v => v.Key))
+                {
+                    result.Add(v.Value);
+                    if (result.Count == count) break;
+                }
+                Plugin.Log.LogWarning($"[T4Squad] only {hidden}/{count} spawn positions were out of sight; " +
+                    $"topped up to {result.Count} with the furthest visible ones rather than deferring the squad");
             }
             return result;
         }
