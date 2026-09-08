@@ -36,6 +36,7 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 |---|---|
 | `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
 | `IcebreakerWaveBackstop` (신규, 09/08) | 엔진룸·선미 트리거 박스를 우회하면 그 구역이 통째로 비어 있다가 한참 뒤에 스폰됨 |
+| `looseLoot.json` 중복 엔트리 제거 (09/08) | 한 스폰포인트에 같은 `composedKey` 가 두 번 — Lots of Loot 등에서 루팅 생성 실패 (원작 1.0.1과 동일 결과 검증) |
 | T4 스폰 지점 폴백 (09/08) | 시야 밖 지점 5개를 못 찾으면 스쿼드 전체를 미뤄서 앰부시가 늦게 도착 |
 | `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
 | `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
