@@ -37,6 +37,7 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 | `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
 | `IcebreakerWaveBackstop` (신규, 09/08) | 엔진룸·선미 트리거 박스를 우회하면 그 구역이 통째로 비어 있다가 한참 뒤에 스폰됨 |
 | `looseLoot.json` 중복 엔트리 제거 (09/08) | 한 스폰포인트에 같은 `composedKey` 가 두 번 — Lots of Loot 등에서 루팅 생성 실패 (원작 1.0.1과 동일 결과 검증) |
+| 원작 1.0.1 서버 수정 이식 (09/08) | 퀘스트 게이트 우회, 맵 언락 실패, 라이드 종료 중복 카운트 — 아래 참고 |
 | T4 스폰 지점 폴백 (09/08) | 시야 밖 지점 5개를 못 찾으면 스쿼드 전체를 미뤄서 앰부시가 늦게 도착 |
 | `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
 | `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
@@ -108,6 +109,26 @@ Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade �
 이 포크는 **시야 밖 지점을 여전히 우선하되 필수 조건에서는 뺐습니다.** 5개가 안 나오면
 사람에게서 가장 먼 지점들로 채우고(8m 이내는 계속 거부), 스쿼드를 미루지 않습니다.
 숨어서 나오는 게 최선이지만, 늦게 오는 스쿼드가 보이는 스쿼드보다 나쁩니다.
+
+**원작 1.0.1 이식 (09/08)**
+
+원작 1.0.1은 **GitHub에 코드가 안 올라왔습니다** — `1.0.1` 태그가 `1.0.0`과 같은 커밋을
+가리키고 tree 해시까지 동일한데, 배포된 DLL은 `1.0.1+c7d6430` 으로 찍혀 있습니다
+(그 커밋의 `ModVersion` 은 `1.0.0`). 즉 커밋 안 한 로컬 수정본으로 빌드해서 배포한
+것이라, 변경분을 **배포 파일에서 역으로 복원**했습니다.
+
+| 원작 changelog | 실제 원인 | 이식 방법 |
+|---|---|---|
+| duplicate loot entries | `looseLoot.json` 한 스폰포인트에 같은 `composedKey` 2번 (505개 중 225개, 여분 1005개) | 배포 파일과 대조해 변환 규칙을 읽어내고 우리 파일에 적용 → **505개 전부 일치 확인** |
+| trader quests appearing before visiting the map | 게이트가 "퀘스트 행이 프로필에 있으면 통과"였는데, SPT는 **보이는 모든 퀘스트에 `AvailableForStart` 행을 씁니다** → 트레이더가 제안하는 순간 게이트가 풀림 | `Started` 이상일 때만 통과하도록 변경 |
+| later btr quests bypassing required return visits | 위 게이트를 `/client/quest/list` 라우터에서만 검사 → 퀘스트 수락 시 해금 경로(`GetNewlyAccessibleQuestsWhenStartingQuest`)는 무검사 | `IcebreakerProgression` 이 `QuestHelper` 를 직접 패치 |
+| boreas part 3 not unlocking Icebreaker | `GenerateAll` 이 돌려주는 `LocationBase` 는 **DB와 공유되는 인스턴스**인데 거기에 프로필별 `Enabled/Locked` 를 직접 씀 → 마지막에 조회한 프로필이 전역 상태를 덮어씀 | `ICloner` 로 복제 후 사본만 수정 (락도 불필요해져서 제거) |
+| duplicate raid ends counting twice | 클라가 `/client/match/local/end` 를 재시도/fika에서 여러 번 보내는데 매번 카운트 | 원장에 `Raids` 집합 추가 — 같은 `ServerId` 는 한 번만 |
+| improved map visit tracking | 방문 원장이 라우터 안에 static 더미로 흩어져 있었음 | `IcebreakerVisitLedger` 로 분리 + 임시파일 후 move 방식 원자적 저장 |
+| fika headless loading crashes | 클라이언트 DLL 쪽 | **미이식** — 서버 DLL만 확보 |
+
+검증: 이식 후 빌드한 DLL을 공식 1.0.1 DLL과 메타데이터 단위로 대조 → **타입·메서드·필드
+구성 완전 일치** (차이는 우리 `IcebreakerGoonGuard` 와 private 필드명뿐).
 
 **엔진룸 / 헬리패드 스폰 타이밍 (09/08 수정)**
 
