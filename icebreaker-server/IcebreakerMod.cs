@@ -548,32 +548,56 @@ public class IcebreakerFlyerGateRouter(
         var quests = questController.GetClientQuests(sessionID);
         try
         {
-            var pmc = profileHelper.GetPmcProfile(sessionID);
-
-            // stamp the crossing count for any gating quest already finished. doing it
-            // here (not only at raid end) catches a hand-in made at the trader screen,
-            // so the very next crossing counts toward the gate instead of being eaten by
-            // a mark stamped after the fact.
-            foreach (var after in CrossingGates.Select(g => g.AfterQuest).Where(a => a is not null).Distinct())
-                if (pmc?.Quests?.Any(q => q.QId.ToString() == after &&
-                        q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true)
-                    IcebreakerRaidWatchRouter.MarkQuestFinished(sessionID.ToString(), after!);
-
-            // the BTR follow-ups only exist once you've made the crossing and come back
-            // alive. once the quest is in the profile it is never hidden again, so an
-            // accepted quest can't be stranded by losing whatever unlocked it.
-            foreach (var gate in CrossingGates)
-            {
-                if (pmc?.Quests?.Any(q => q.QId.ToString() == gate.QuestId) == true) continue;
-                bool earned = gate.AfterQuest is null
-                    ? IcebreakerRaidWatchRouter.HasVisited(sessionID.ToString())
-                    : IcebreakerRaidWatchRouter.HasVisitedSince(sessionID.ToString(), gate.AfterQuest);
-                if (!earned)
-                    quests = quests.Where(q => q.Id.ToString() != gate.QuestId).ToList();
-            }
+            FilterQuests(quests, profileHelper.GetPmcProfile(sessionID), sessionID.ToString(),
+                         IcebreakerRaidWatchRouter.Visits);
         }
         catch (Exception e) when (e is not OperationCanceledException) { logger.Warning($"[Icebreaker] quest gate check failed (quests left visible): {e.Message}"); }
         return new ValueTask<string>(httpResponseUtil.GetBody(quests));
+    }
+
+    // Stamp the crossing count for any gating quest already finished. Doing it here (not
+    // only at raid end) catches a hand-in made at the trader screen, so the very next
+    // crossing counts toward the gate instead of being eaten by a mark stamped after the
+    // fact.
+    public static void MarkFinishedQuests(PmcData? pmc, string sessionId, IcebreakerVisitLedger visits)
+    {
+        foreach (var gate in CrossingGates)
+        {
+            if (gate.AfterQuest is null) continue;
+            if (pmc?.Quests?.Any(q => q.QId.ToString() == gate.AfterQuest &&
+                    q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true)
+                visits.MarkQuestFinished(sessionId, gate.AfterQuest);
+        }
+    }
+
+    // The gated quests only exist once you have made the crossing and come back. Shared by
+    // the /client/quest/list route and by IcebreakerProgression's QuestHelper patches, so
+    // the gate holds on every path the client can learn about a quest through.
+    public static void FilterQuests(List<Quest> quests, PmcData? pmc, string sessionId, IcebreakerVisitLedger visits)
+    {
+        MarkFinishedQuests(pmc, sessionId, visits);
+
+        foreach (var gate in CrossingGates)
+        {
+            // Once the player has actually ENGAGED with the quest it is never hidden
+            // again, so an accepted quest cannot be stranded by losing whatever unlocked
+            // it. The old check was "is the row in the profile at all", which every
+            // visible quest satisfies - SPT writes an AvailableForStart row for each one -
+            // so the gate stopped hiding these the moment the trader offered them, which
+            // is exactly the "quests appearing before visiting the map" report. Locked,
+            // AvailableForStart and AvailableAfter all mean "not engaged".
+            var entry = pmc?.Quests?.FirstOrDefault(q => q.QId.ToString() == gate.QuestId);
+            bool engaged = entry is not null
+                && entry.Status is not (SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Locked
+                                     or SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableForStart
+                                     or SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableAfter);
+            if (engaged) continue;
+
+            bool earned = gate.AfterQuest is null
+                ? visits.HasVisited(sessionId)
+                : visits.HasVisitedSince(sessionId, gate.AfterQuest);
+            if (!earned) quests.RemoveAll(q => q.Id.ToString() == gate.QuestId);
+        }
     }
 }
 
@@ -605,7 +629,11 @@ public class IcebreakerRaidWatchRouter(
             ),
         ])
 {
-    private const string SlotId = "suburbs";
+    // The crossing ledger, extracted so IcebreakerProgression can reach it from the
+    // QuestHelper patches without going through this router.
+    internal static readonly IcebreakerVisitLedger Visits = new(
+        SysPath.Combine(SysPath.GetDirectoryName(typeof(IcebreakerRaidWatchRouter).Assembly.Location)!,
+                        "db", "icebreaker_visits.json"));
 
     // quests that hand themselves in. the BTR driver only exists in raid, so a quest
     // whose last objective lands on a map he isn't on would otherwise be unturnable
@@ -667,95 +695,9 @@ public class IcebreakerRaidWatchRouter(
         catch (Exception e) when (e is not OperationCanceledException) { logger?.Warning($"[Icebreaker] auto turn-in failed: {e.Message}"); }
     }
 
-    // per-profile crossing ledger. a bare "has been there" bool was enough for one gate,
-    // but "go there AGAIN, after quest X" needs to tell trips apart, so we count
-    // them and stamp the count reached when each gating quest was finished. the gate is
-    // then just Visits > Marks[questId], which cannot be satisfied by trips the player
-    // had already banked before taking the quest.
-    private sealed class Ledger
-    {
-        public int Visits { get; set; }
-        public Dictionary<string, int> Marks { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static readonly Dictionary<string, Ledger> Profiles = new(StringComparer.OrdinalIgnoreCase);
-    private static bool _loaded;
-    private static readonly object Gate = new();
-
-    private static string StorePath =>
-        SysPath.Combine(SysPath.GetDirectoryName(typeof(IcebreakerRaidWatchRouter).Assembly.Location)!,
-                        "db", "icebreaker_visits.json");
-
-    // total successful crossings, ever. this is the Stick to It gate.
-    public static bool HasVisited(string sessionId)
-    {
-        EnsureLoaded();
-        lock (Gate) return Profiles.TryGetValue(sessionId, out var l) && l.Visits > 0;
-    }
-
-    // a crossing made AFTER afterQuestId was handed in. false while the quest is
-    // unfinished (no mark yet), which is what keeps the next quest hidden.
-    public static bool HasVisitedSince(string sessionId, string afterQuestId)
-    {
-        EnsureLoaded();
-        lock (Gate)
-            return Profiles.TryGetValue(sessionId, out var l)
-                && l.Marks.TryGetValue(afterQuestId, out var mark)
-                && l.Visits > mark;
-    }
-
-    // stamps the crossing count a quest was finished at, once. callers hit this from
-    // both the raid-end pass and the quest-list gate, so a hand-in at the trader screen
-    // is marked in the menu rather than waiting for the next raid to end — otherwise a
-    // crossing made before we noticed would be swallowed by a too-high mark.
-    public static void MarkQuestFinished(string sessionId, string questId)
-    {
-        EnsureLoaded();
-        lock (Gate)
-        {
-            if (!Profiles.TryGetValue(sessionId, out var l)) Profiles[sessionId] = l = new Ledger();
-            if (l.Marks.ContainsKey(questId)) return;
-            l.Marks[questId] = l.Visits;
-        }
-        Save(null);
-    }
-
-    private static void EnsureLoaded()
-    {
-        lock (Gate)
-        {
-            if (_loaded) return;
-            _loaded = true;
-            try
-            {
-                if (!System.IO.File.Exists(StorePath)) return;
-                var raw = System.IO.File.ReadAllText(StorePath);
-                // the original store was a flat list of session ids. read it as one trip
-                // each so an existing profile keeps the gate it already earned.
-                if (raw.TrimStart().StartsWith("["))
-                {
-                    foreach (var id in System.Text.Json.JsonSerializer.Deserialize<List<string>>(raw) ?? [])
-                        Profiles[id] = new Ledger { Visits = 1 };
-                    return;
-                }
-                foreach (var kv in System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, Ledger>>(raw) ?? [])
-                    Profiles[kv.Key] = kv.Value;
-            }
-            catch { }
-        }
-    }
-
-    private static void Save(ISptLogger<IcebreakerRaidWatchRouter>? logger)
-    {
-        try
-        {
-            System.IO.Directory.CreateDirectory(SysPath.GetDirectoryName(StorePath)!);
-            Dictionary<string, Ledger> snapshot;
-            lock (Gate) snapshot = Profiles.ToDictionary(kv => kv.Key, kv => kv.Value);
-            System.IO.File.WriteAllText(StorePath, System.Text.Json.JsonSerializer.Serialize(snapshot));
-        }
-        catch (Exception e) when (e is not OperationCanceledException) { logger?.Warning($"[Icebreaker] visit store write failed: {e.Message}"); }
-    }
+    // Kept as a static so AutoTurnIn's callers do not need the ledger handed to them.
+    public static void MarkQuestFinished(string sessionId, string questId) =>
+        Visits.MarkQuestFinished(sessionId, questId);
 
     private static ValueTask<string> Watch(
         ISptLogger<IcebreakerRaidWatchRouter> logger,
@@ -765,26 +707,11 @@ public class IcebreakerRaidWatchRouter(
     {
         try
         {
-            EnsureLoaded();
-            var location = info?.ServerId?.Split('.').FirstOrDefault();
-            // ANY raid end on our slot counts as a visit — survive, die, MIA, whatever
-            // (user call 08-19: "you can live or die, you just have to go there"). the
-            // gated quests are all "you have seen the ship" beats, and a corpse on the
-            // deck has very much seen the ship. the one exclusion left is a raid that
-            // never really started (the client posts an end even when loading aborts,
-            // with no Results block) — no Results = no visit.
-            if (info?.Results != null && string.Equals(location, SlotId, StringComparison.OrdinalIgnoreCase))
-            {
-                int total;
-                lock (Gate)
-                {
-                    if (!Profiles.TryGetValue(sessionID.ToString(), out var l))
-                        Profiles[sessionID.ToString()] = l = new Ledger();
-                    total = ++l.Visits;
-                }
-                Save(logger);
-                logger.Info($"[Icebreaker] icebreaker visit recorded, outcome {info.Results.Result} (crossing #{total})");
-            }
+            // null means this end was not counted - wrong map, no Results block, or a
+            // repeat post for a raid already banked. Only a real new crossing logs.
+            var total = Visits.RecordRaidEnd(sessionID.ToString(), info);
+            if (total is not null)
+                logger.Info($"[Icebreaker] icebreaker visit recorded, outcome {info.Results!.Result} (crossing #{total})");
         }
         catch (Exception e) when (e is not OperationCanceledException) { logger.Warning($"[Icebreaker] raid watch failed: {e.Message}"); }
 
@@ -801,6 +728,7 @@ public class IcebreakerRaidWatchRouter(
 public class IcebreakerLockRouter(
     JsonUtil jsonUtil,
     SPTarkov.Server.Core.Controllers.LocationController locationController,
+    ICloner cloner,
     SPTarkov.Server.Core.Helpers.Profile.ProfileHelper profileHelper,
     SPTarkov.Server.Core.Utils.HttpResponseUtil httpResponseUtil,
     ISptLogger<IcebreakerLockRouter> logger)
@@ -810,11 +738,14 @@ public class IcebreakerLockRouter(
             new SPTarkov.Server.Core.DI.RouteAction<SPTarkov.Server.Core.Models.Eft.Common.EmptyRequestData>(
                 "/client/locations",
                 async (url, info, sessionID, output, cancellationToken) =>
-                    await LockLocations(locationController, profileHelper, httpResponseUtil, logger, sessionID)
+                    await LockLocations(locationController, cloner, profileHelper, httpResponseUtil, logger, sessionID)
             ),
         ])
 {
-    private static string? _finalQuestId;
+    // Boreas Part 3. Defaulted rather than left null: a missing or unreadable
+    // db/maplock.json used to mean "no quest id", which skipped the whole block and left
+    // the map permanently visible - the lock silently did nothing.
+    private static string? _finalQuestId = "9d5e3f7d6320a7fd139a2772";
     private static bool _configLoaded;
 
     private static string? FinalQuestId(ISptLogger<IcebreakerLockRouter> logger)
@@ -834,48 +765,49 @@ public class IcebreakerLockRouter(
         }
         catch (Exception e)
         {
-            logger.Warning($"[Icebreaker] map lock config unreadable; leaving map unlocked: {e.Message}");
+            logger.Warning($"[Icebreaker] map lock config unreadable; using Boreas Part 3: {e.Message}");
         }
         return _finalQuestId;
     }
 
-    // LocationBase instances are shared with the database. Mutation and serialization
-    // must stay atomic so concurrent profiles cannot observe one another's lock state.
-    private static readonly object SerializeGate = new();
-
     private static ValueTask<string> LockLocations(
         SPTarkov.Server.Core.Controllers.LocationController locationController,
+        ICloner cloner,
         SPTarkov.Server.Core.Helpers.Profile.ProfileHelper profileHelper,
         SPTarkov.Server.Core.Utils.HttpResponseUtil httpResponseUtil,
         ISptLogger<IcebreakerLockRouter> logger,
         MongoId sessionID)
     {
-        var response = locationController.GenerateAll(sessionID);
+        // GenerateAll hands back LocationBase instances that are SHARED with the database,
+        // and the old code wrote Enabled/Locked straight onto them. That is a per-profile
+        // answer stamped onto global state: whichever profile asked last owned the flag,
+        // so finishing Boreas Part 3 could leave the map still locked because another
+        // profile's lookup had already written the map shut - and a lock taken around the
+        // mutation could only serialise the damage, not prevent it. Clone first and edit
+        // the copy; nothing outside this response is touched, and the lock is gone with it.
+        var response = cloner.Clone(locationController.GenerateAll(sessionID));
         var questId = FinalQuestId(logger);
         if (string.IsNullOrEmpty(questId))
             return new ValueTask<string>(httpResponseUtil.GetBody(response));
 
-        lock (SerializeGate)
+        try
         {
-            try
+            bool unlocked = IsUnlocked(profileHelper.GetPmcProfile(sessionID), questId);
+            foreach (var location in response.Locations!.Values)
             {
-                var pmc = profileHelper.GetPmcProfile(sessionID);
-                bool unlocked = pmc?.Quests?.Any(q =>
-                    q.QId.ToString() == questId &&
-                    q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true;
-                foreach (var location in response.Locations!.Values)
-                {
-                    if (location?.IdField.ToString() != "5714dc342459777137212e0b") continue;
-                    location.Enabled = unlocked;
-                    location.Locked = !unlocked;
-                    break;
-                }
+                if (location?.IdField.ToString() != "5714dc342459777137212e0b") continue;
+                location.Enabled = unlocked;
+                location.Locked = !unlocked;
             }
-            catch (Exception e) when (e is not OperationCanceledException)
-            {
-                logger.Warning($"[Icebreaker] map lock check failed (leaving unlocked): {e.Message}");
-            }
-            return new ValueTask<string>(httpResponseUtil.GetBody(response));
         }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger.Warning($"[Icebreaker] map lock check failed (leaving unlocked): {e.Message}");
+        }
+        return new ValueTask<string>(httpResponseUtil.GetBody(response));
     }
+
+    public static bool IsUnlocked(PmcData? pmc, string questId) =>
+        pmc?.Quests?.Any(q => q.QId.ToString() == questId &&
+            q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true;
 }
