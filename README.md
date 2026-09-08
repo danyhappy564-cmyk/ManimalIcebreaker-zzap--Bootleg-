@@ -125,7 +125,7 @@ Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade �
 | boreas part 3 not unlocking Icebreaker | `GenerateAll` 이 돌려주는 `LocationBase` 는 **DB와 공유되는 인스턴스**인데 거기에 프로필별 `Enabled/Locked` 를 직접 씀 → 마지막에 조회한 프로필이 전역 상태를 덮어씀 | `ICloner` 로 복제 후 사본만 수정 (락도 불필요해져서 제거) |
 | duplicate raid ends counting twice | 클라가 `/client/match/local/end` 를 재시도/fika에서 여러 번 보내는데 매번 카운트 | 원장에 `Raids` 집합 추가 — 같은 `ServerId` 는 한 번만 |
 | improved map visit tracking | 방문 원장이 라우터 안에 static 더미로 흩어져 있었음 | `IcebreakerVisitLedger` 로 분리 + 임시파일 후 move 방식 원자적 저장 |
-| fika headless loading crashes | 클라이언트 DLL 쪽 | **미이식** — 서버 DLL만 확보 |
+| fika headless loading crashes | 클라이언트 DLL 쪽 | **의도적으로 미이식** — 이 포크는 fika를 쓰지 않습니다 |
 
 검증: 이식 후 빌드한 DLL을 공식 1.0.1 DLL과 메타데이터 단위로 대조 → **타입·메서드·필드
 구성 완전 일치** (차이는 우리 `IcebreakerGoonGuard` 와 private 필드명뿐).
