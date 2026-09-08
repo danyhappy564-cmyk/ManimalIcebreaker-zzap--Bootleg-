@@ -34,6 +34,7 @@ namespace Manimal.Icebreaker
             IcebreakerChainDoor.ResetForRaid();
             IcebreakerFlares.ResetForRaid();
             IcebreakerHoldLock.ResetForRaid(); // a raid that ended mid-hold must not carry the lock over
+            IcebreakerWaveBackstop.ResetForRaid();
             ResetCutsceneGate();
             StartCoroutine(Run());
             // DoorProbe: retired once it nailed the MidOpen/MidClose bug, RE-ARMED behind
@@ -103,6 +104,10 @@ namespace Manimal.Icebreaker
                 // crew landed minutes late, audibly around the player inside the ship
                 SubscribeEventSpawns();
                 StartCoroutine(EngineAdvanceWatch());
+                // the engine and stern boxes are each a single authored trigger, and a
+                // route that misses one leaves that whole area empty until you double
+                // back — see IcebreakerWaveBackstop
+                StartCoroutine(IcebreakerWaveBackstop.Watch());
             }
 
             // THE CLIENT NO LONGER SPAWNS ANYONE (2026-08-11). base.json now carries the

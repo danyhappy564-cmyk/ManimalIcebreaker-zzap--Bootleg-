@@ -1,0 +1,158 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using Comfort.Common;
+using EFT;
+using UnityEngine;
+
+namespace Manimal.Icebreaker
+{
+    // The engine-room and stern squads are trigger waves: base.json carries them with
+    // Time 9999 and TriggerName botEvent, so the ONLY thing that ever spawns them is a
+    // player crossing their one authored AIPlaceInfo box. Both boxes sit a long way from
+    // the squad they deploy - the hide box is at z=+59 and drops the squad at z=-21, the
+    // stern box is at z=+2 and drops two fireteams at z=-67..-71 - which is the intended
+    // "they are already in position before you get there" staging.
+    //
+    // It also means a route that misses the box leaves the whole area empty. Player report
+    // (2026-09-08): the engine room, the helipad and the deck under it are sometimes
+    // deserted, and the squad only turns up later, once you have pushed well past them.
+    // The logs show why: the same hide box was crossed at t=43s in one raid and t=1032s in
+    // the next. It is one box, at deck height y=20 inside the bow superstructure, and the
+    // engine room is reachable without ever entering it.
+    //
+    // So back the box up with proximity. If a human gets close to a squad's own spawn
+    // markers and its trigger still has not fired, raise the trigger here - through
+    // GlobalEventDispatcher.AnyEvent, exactly the call the authored box makes, so BSG's
+    // BossSpawnScenario delivers the wave down its normal path. Nothing changes when the
+    // box works: the event is already raised by then and this never runs.
+    internal static class IcebreakerWaveBackstop
+    {
+        // Far enough that the squad is placed before the area is in view, and far short of
+        // the distance from any player start to these zones (104m to the engine hides,
+        // 156m to the stern), so a raid can never open with the backstop already tripped.
+        private const float ApproachRadius = 40f;
+
+        // Only the two the player reported, and only these two on purpose. They are the
+        // group-size triggers with a single box each and their zones sit alone at the far
+        // end of the ship, so 40m is unambiguous. The wedge box is inside the rooms it
+        // fills (4-16m) and the T1/T3/T4 boxes gate tier progression on the mandatory
+        // route - a proximity backstop there would fire them EARLIER than authored and
+        // rearrange the choreography for a problem nobody has.
+        private sealed class Guard
+        {
+            internal readonly string Family;   // GroupSizeEventLogic.TableFor keyword
+            internal readonly string Label;
+            internal readonly string[] Zones;
+            internal bool Done;
+            internal Guard(string family, string label, params string[] zones)
+            {
+                Family = family; Label = label; Zones = zones;
+            }
+        }
+
+        private static readonly Guard[] Guards =
+        {
+            new Guard("Hide", "engine room", "BotZoneEngineHide"),
+            new Guard("Sten", "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
+        };
+
+        internal static void ResetForRaid()
+        {
+            foreach (var g in Guards) g.Done = false;
+        }
+
+        internal static IEnumerator Watch()
+        {
+            var wait = new WaitForSeconds(0.5f);
+            var markers = new Dictionary<string, List<Vector3>>();
+            var humans = new List<Player>();
+            float radiusSqr = ApproachRadius * ApproachRadius;
+
+            while (true)
+            {
+                yield return wait;
+                if (!IceGate.On || !FikaBridge.BotsAuthority) continue;
+
+                int remaining = 0;
+                BotZone[] zones = null; // fetched at most once per tick, and only if needed
+
+                foreach (var g in Guards)
+                {
+                    if (g.Done) continue;
+
+                    var table = GroupSizeEventLogic.TableFor(g.Family);
+                    if (table == null) { g.Done = true; continue; }
+
+                    // The box (or an earlier backstop pass) already raised one of this
+                    // family's ids - the wave is on its way, nothing to back up.
+                    if (table.Any(t => IcebreakerAIPlaces.Raised.Contains(t.Item3)))
+                    {
+                        g.Done = true;
+                        continue;
+                    }
+
+                    remaining++;
+                    var points = Markers(g, markers, ref zones);
+                    if (points.Count == 0) continue;
+
+                    humans.Clear();
+                    FikaBridge.CollectHumans(humans);
+                    if (humans.Count == 0) continue;
+
+                    float nearest = float.MaxValue;
+                    foreach (var point in points)
+                        foreach (var h in humans)
+                        {
+                            float d = (h.Position - point).sqrMagnitude;
+                            if (d < nearest) nearest = d;
+                        }
+                    if (nearest > radiusSqr) continue;
+
+                    // Same group-size table the authored box uses, resolved now rather
+                    // than at build time so a late joiner is counted.
+                    int size = GroupSizeEventLogic.GroupSize();
+                    string id = null;
+                    foreach (var (min, max, name) in table)
+                        if (size >= min && size <= max) { id = name; break; }
+                    if (id == null) { g.Done = true; continue; }
+
+                    g.Done = true;
+                    Plugin.Log.LogWarning(
+                        $"[WaveBackstop] {g.Label}: a player got within {Mathf.Sqrt(nearest):0}m of the spawn markers "
+                        + $"and the authored trigger never fired - raising '{id}' (group={size}) so the squad is in place");
+                    Singleton<GlobalEventDispatcher>.Instance?.AnyEvent(id);
+                }
+
+                if (remaining == 0) yield break;
+            }
+        }
+
+        // Read the markers off the live BotZone rather than hardcoding coordinates, so this
+        // follows the bundle and base.json instead of drifting from them.
+        private static List<Vector3> Markers(Guard g, Dictionary<string, List<Vector3>> cache, ref BotZone[] zones)
+        {
+            var all = new List<Vector3>();
+            foreach (var name in g.Zones)
+            {
+                if (cache.TryGetValue(name, out var cached)) { all.AddRange(cached); continue; }
+
+                if (zones == null) zones = UnityEngine.Object.FindObjectsOfType<BotZone>();
+                var zone = zones.FirstOrDefault(z => z != null && z.name == name);
+                if (zone == null || zone.SpawnPoints == null) continue;
+
+                var points = new List<Vector3>();
+                foreach (var sp in zone.SpawnPoints)
+                    if (sp != null) points.Add(sp.Position);
+
+                // Only cache once the zone has actually produced markers. An empty list
+                // early in the raid means the zone is not built yet, not that it has none,
+                // and caching that would disarm the backstop for the rest of the raid.
+                if (points.Count == 0) continue;
+                cache[name] = points;
+                all.AddRange(points);
+            }
+            return all;
+        }
+    }
+}
