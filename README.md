@@ -9,7 +9,10 @@
 > 여기서 한 건 실사용 중에 잡힌 성능/크래시 문제를 고쳐서 얹은 것뿐입니다.
 > 기능 추가나 밸런스 변경은 없습니다.
 
-현재 기준: **upstream 1.0.0 / SPT 4.1.5**
+현재 기준: **upstream 1.0.0 + 1.0.1 서버 수정 이식 / SPT 4.1.5**
+
+> 원작 1.0.1은 코드가 GitHub에 올라오지 않았습니다 (태그만 1.0.0 커밋에 추가로 찍힘).
+> 배포된 DLL에서 변경분을 복원해 이식했고, 근거는 아래 [원작 1.0.1 이식](#원작-101-이식)에 있습니다.
 
 ---
 
@@ -37,7 +40,6 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 | `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
 | `IcebreakerWaveBackstop` (신규, 09/08) | 엔진룸·선미 트리거 박스를 우회하면 그 구역이 통째로 비어 있다가 한참 뒤에 스폰됨 |
 | `looseLoot.json` 중복 엔트리 제거 (09/08) | 한 스폰포인트에 같은 `composedKey` 가 두 번 — Lots of Loot 등에서 루팅 생성 실패 (원작 1.0.1과 동일 결과 검증) |
-| 원작 1.0.1 서버 수정 이식 (09/08) | 퀘스트 게이트 우회, 맵 언락 실패, 라이드 종료 중복 카운트 — 아래 참고 |
 | T4 스폰 지점 폴백 (09/08) | 시야 밖 지점 5개를 못 찾으면 스쿼드 전체를 미뤄서 앰부시가 늦게 도착 |
 | `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
 | `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
@@ -45,6 +47,12 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 | `PatrolScanner` 좁은 방 폴백 | 좁은 구역에서 봇이 그 자리에 못 박힘 |
 | `OrbitBrainLayerCompat` | ORBIT이 `Suburbs`를 몰라서 던지는 예외가 우리 AI 레이어 생성까지 같이 죽임 |
 | `base.json` 중복 `BossLocationSpawn` 7개 제거 | 같은 스쿼드가 트리거마다 두 번씩 스폰 (라이드당 봇 29마리 여분) |
+
+**원작 1.0.1 백포트** (우리 수정이 아니라 원작자의 수정입니다)
+
+퀘스트 게이트 우회 2건, 보레아스 3부 맵 언락 실패, 라이드 종료 중복 카운트,
+`looseLoot.json` 중복 엔트리 — 원작이 코드를 안 올려서 배포 파일에서 복원했습니다.
+→ [원작 1.0.1 이식](#원작-101-이식)
 
 **설정 차이**
 
@@ -80,57 +88,9 @@ dotnet build ManimalIcebreaker.sln
 
 ---
 
-## 알려진 문제
+## 09/08에 고친 것
 
-**안티앨리어싱 / LOD 거리 흐려짐 (미해결)**
-
-같은 클라이언트 세션에서 재현되며, **원작 1.0.0 빌드에서도 동일하게 발생합니다** —
-이 포크의 diff가 원인이 아닙니다. SPT 4.0.10 시절에는 하이드아웃을 다녀온 뒤에만
-터졌는데, 4.1.5에서는 바로 라이드에 들어가도 터집니다.
-
-09/03 조사에서 제외 확인된 것: TargetDummies, HideoutShootout, BetterVision,
-Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade 잔재,
-`ScopeZoomHandler` NRE, `CamDonorSkip`, `QualitySettings.lodBias` 잔재.
-자세한 경위는 아래 `<26/09/03 상세 변경점>` 참고.
-
-**T4 스쿼드가 1/5만 스폰됨 (09/08 완화)**
-
-```
-[T4Squad] whole squad deferred: T4 has only 1/5 safe, separated spawn positions
-```
-
-원작 1.0.0이 새로 넣은 `IcebreakerFinalSquad`는 T4에 분리된 스폰 지점 5개를
-요구하는데, `BotZoneInside_t4`의 마커는 2개뿐입니다 (`markers=2`). 원작은 마커 주변
-반경 5.4m를 훑어 나머지를 만들어내지만, **플레이어 시야에 걸리는 지점을 전부 버립니다.**
-그래서 플레이어가 그 방을 볼 수 있는 위치에 있으면 후보가 1개까지 떨어지고, 스쿼드
-전체가 `DelayBossSpawn` 으로 미뤄집니다 — 09/07 로그에서 3번 연기된 뒤에야 5/5로
-붙었고, 그때는 플레이어가 이미 그 구간을 지나간 뒤였습니다.
-
-이 포크는 **시야 밖 지점을 여전히 우선하되 필수 조건에서는 뺐습니다.** 5개가 안 나오면
-사람에게서 가장 먼 지점들로 채우고(8m 이내는 계속 거부), 스쿼드를 미루지 않습니다.
-숨어서 나오는 게 최선이지만, 늦게 오는 스쿼드가 보이는 스쿼드보다 나쁩니다.
-
-**원작 1.0.1 이식 (09/08)**
-
-원작 1.0.1은 **GitHub에 코드가 안 올라왔습니다** — `1.0.1` 태그가 `1.0.0`과 같은 커밋을
-가리키고 tree 해시까지 동일한데, 배포된 DLL은 `1.0.1+c7d6430` 으로 찍혀 있습니다
-(그 커밋의 `ModVersion` 은 `1.0.0`). 즉 커밋 안 한 로컬 수정본으로 빌드해서 배포한
-것이라, 변경분을 **배포 파일에서 역으로 복원**했습니다.
-
-| 원작 changelog | 실제 원인 | 이식 방법 |
-|---|---|---|
-| duplicate loot entries | `looseLoot.json` 한 스폰포인트에 같은 `composedKey` 2번 (505개 중 225개, 여분 1005개) | 배포 파일과 대조해 변환 규칙을 읽어내고 우리 파일에 적용 → **505개 전부 일치 확인** |
-| trader quests appearing before visiting the map | 게이트가 "퀘스트 행이 프로필에 있으면 통과"였는데, SPT는 **보이는 모든 퀘스트에 `AvailableForStart` 행을 씁니다** → 트레이더가 제안하는 순간 게이트가 풀림 | `Started` 이상일 때만 통과하도록 변경 |
-| later btr quests bypassing required return visits | 위 게이트를 `/client/quest/list` 라우터에서만 검사 → 퀘스트 수락 시 해금 경로(`GetNewlyAccessibleQuestsWhenStartingQuest`)는 무검사 | `IcebreakerProgression` 이 `QuestHelper` 를 직접 패치 |
-| boreas part 3 not unlocking Icebreaker | `GenerateAll` 이 돌려주는 `LocationBase` 는 **DB와 공유되는 인스턴스**인데 거기에 프로필별 `Enabled/Locked` 를 직접 씀 → 마지막에 조회한 프로필이 전역 상태를 덮어씀 | `ICloner` 로 복제 후 사본만 수정 (락도 불필요해져서 제거) |
-| duplicate raid ends counting twice | 클라가 `/client/match/local/end` 를 재시도/fika에서 여러 번 보내는데 매번 카운트 | 원장에 `Raids` 집합 추가 — 같은 `ServerId` 는 한 번만 |
-| improved map visit tracking | 방문 원장이 라우터 안에 static 더미로 흩어져 있었음 | `IcebreakerVisitLedger` 로 분리 + 임시파일 후 move 방식 원자적 저장 |
-| fika headless loading crashes | 클라이언트 DLL 쪽 | **의도적으로 미이식** — 이 포크는 fika를 쓰지 않습니다 |
-
-검증: 이식 후 빌드한 DLL을 공식 1.0.1 DLL과 메타데이터 단위로 대조 → **타입·메서드·필드
-구성 완전 일치** (차이는 우리 `IcebreakerGoonGuard` 와 private 필드명뿐).
-
-**엔진룸 / 헬리패드 스폰 타이밍 (09/08 수정)**
+### 엔진룸 / 헬리패드 스폰 타이밍
 
 블랙디비전 웨이브는 전부 `base.json` 에 `Time: 9999` + `TriggerName: botEvent` 로
 들어있어서, **오직 플레이어가 트리거 박스를 지나야만** 스폰됩니다. 그리고 박스는
@@ -165,6 +125,58 @@ Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade �
                and the authored trigger never fired - raising 'hides0' (group=1)
 ```
 
+### T4 스쿼드가 1/5만 스폰되던 문제
+
+```
+[T4Squad] whole squad deferred: T4 has only 1/5 safe, separated spawn positions
+```
+
+원작 1.0.0이 새로 넣은 `IcebreakerFinalSquad`는 T4에 분리된 스폰 지점 5개를
+요구하는데, `BotZoneInside_t4`의 마커는 2개뿐입니다 (`markers=2`). 원작은 마커 주변
+반경 5.4m를 훑어 나머지를 만들어내지만, **플레이어 시야에 걸리는 지점을 전부 버립니다.**
+그래서 플레이어가 그 방을 볼 수 있는 위치에 있으면 후보가 1개까지 떨어지고, 스쿼드
+전체가 `DelayBossSpawn` 으로 미뤄집니다 — 09/07 로그에서 3번 연기된 뒤에야 5/5로
+붙었고, 그때는 플레이어가 이미 그 구간을 지나간 뒤였습니다.
+
+이 포크는 **시야 밖 지점을 여전히 우선하되 필수 조건에서는 뺐습니다.** 5개가 안 나오면
+사람에게서 가장 먼 지점들로 채우고(8m 이내는 계속 거부), 스쿼드를 미루지 않습니다.
+숨어서 나오는 게 최선이지만, 늦게 오는 스쿼드가 보이는 스쿼드보다 나쁩니다.
+
+### 원작 1.0.1 이식
+
+원작 1.0.1은 **GitHub에 코드가 안 올라왔습니다** — `1.0.1` 태그가 `1.0.0`과 같은 커밋을
+가리키고 tree 해시까지 동일한데, 배포된 DLL은 `1.0.1+c7d6430` 으로 찍혀 있습니다
+(그 커밋의 `ModVersion` 은 `1.0.0`). 즉 커밋 안 한 로컬 수정본으로 빌드해서 배포한
+것이라, 변경분을 **배포 파일에서 역으로 복원**했습니다.
+
+| 원작 changelog | 실제 원인 | 이식 방법 |
+|---|---|---|
+| duplicate loot entries | `looseLoot.json` 한 스폰포인트에 같은 `composedKey` 2번 (505개 중 225개, 여분 1005개) | 배포 파일과 대조해 변환 규칙을 읽어내고 우리 파일에 적용 → **505개 전부 일치 확인** |
+| trader quests appearing before visiting the map | 게이트가 "퀘스트 행이 프로필에 있으면 통과"였는데, SPT는 **보이는 모든 퀘스트에 `AvailableForStart` 행을 씁니다** → 트레이더가 제안하는 순간 게이트가 풀림 | `Started` 이상일 때만 통과하도록 변경 |
+| later btr quests bypassing required return visits | 위 게이트를 `/client/quest/list` 라우터에서만 검사 → 퀘스트 수락 시 해금 경로(`GetNewlyAccessibleQuestsWhenStartingQuest`)는 무검사 | `IcebreakerProgression` 이 `QuestHelper` 를 직접 패치 |
+| boreas part 3 not unlocking Icebreaker | `GenerateAll` 이 돌려주는 `LocationBase` 는 **DB와 공유되는 인스턴스**인데 거기에 프로필별 `Enabled/Locked` 를 직접 씀 → 마지막에 조회한 프로필이 전역 상태를 덮어씀 | `ICloner` 로 복제 후 사본만 수정 (락도 불필요해져서 제거) |
+| duplicate raid ends counting twice | 클라가 `/client/match/local/end` 를 재시도/fika에서 여러 번 보내는데 매번 카운트 | 원장에 `Raids` 집합 추가 — 같은 `ServerId` 는 한 번만 |
+| improved map visit tracking | 방문 원장이 라우터 안에 static 더미로 흩어져 있었음 | `IcebreakerVisitLedger` 로 분리 + 임시파일 후 move 방식 원자적 저장 |
+| fika headless loading crashes | 클라이언트 DLL 쪽 | **의도적으로 미이식** — 이 포크는 fika를 쓰지 않습니다 |
+
+검증: 이식 후 빌드한 DLL을 공식 1.0.1 DLL과 메타데이터 단위로 대조 → **타입·메서드·필드
+구성 완전 일치** (차이는 우리 `IcebreakerGoonGuard` 와 private 필드명뿐).
+
+---
+
+## 알려진 문제
+
+**안티앨리어싱 / LOD 거리 흐려짐 (미해결)**
+
+같은 클라이언트 세션에서 재현되며, **원작 1.0.0 빌드에서도 동일하게 발생합니다** —
+이 포크의 diff가 원인이 아닙니다. SPT 4.0.10 시절에는 하이드아웃을 다녀온 뒤에만
+터졌는데, 4.1.5에서는 바로 라이드에 들어가도 터집니다.
+
+09/03 조사에서 제외 확인된 것: TargetDummies, HideoutShootout, BetterVision,
+Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade 잔재,
+`ScopeZoomHandler` NRE, `CamDonorSkip`, `QualitySettings.lodBias` 잔재.
+자세한 경위는 아래 `<26/09/03 상세 변경점>` 참고.
+
 **루팅 아이템 아이콘 반투명 (미해결)**
 
 `CamDonorSkip`과 무관한 것으로 09/03에 확인됨. 별도 조사 필요.
@@ -172,6 +184,41 @@ Hideout Init Race Fix, PiP-Disabler, CompoundingPerf, DLSS5/OptiScaler/ReShade �
 ---
 
 ## 변경점
+
+<26/09/08 상세 변경점>
+
+- 엔진룸·헬리패드·헬리패드 아래에 적이 없다가 한참 지나서야 스폰되던 문제. 블랙디비전
+  웨이브는 전부 `base.json`에 `Time: 9999` + `TriggerName: botEvent`이라 **트리거 박스를
+  밟아야만** 스폰되는데, 박스가 스쿼드 배치 지점에서 69~80m 떨어져 있고 각 웨이브당
+  박스가 하나뿐임 — 그 박스를 안 밟는 경로로 가면 구역이 통째로 빈 채로 남음. 로그가
+  그대로 보여줌: 같은 hides 박스가 한 판은 t=43s, 다음 판은 t=1032s(17분)에 밟혔음.
+  `IcebreakerWaveBackstop` 추가 — 사람이 스폰 마커 40m 안에 들어왔는데 트리거가 아직
+  안 떴으면 박스가 부르는 것과 같은 `GlobalEventDispatcher.AnyEvent`를 대신 호출.
+  엔진룸·선미 두 개만 받침(웨지 박스는 자기가 채우는 방 안에 있고, T1/T3/T4는 필수
+  동선의 티어 게이트라 거리로 받치면 원작보다 빨리 터져서 연출이 흐트러짐)
+
+- T4 스쿼드가 1/5만 스폰되던 문제. 원인은 마커 개수(2개)가 아니라 **시야 필터**였음 —
+  원작은 마커 주변을 훑어 나머지를 만들되 플레이어에게 보이는 지점을 전부 버려서,
+  그 방이 보이는 위치에 서 있으면 후보가 1개까지 떨어지고 스쿼드 전체가
+  `DelayBossSpawn`으로 밀림(09/07 로그: 3번 연기 후 도착, 이미 지나간 뒤). 시야 밖을
+  우선하되 필수 조건에서 제외 — 5개가 안 되면 사람에게서 가장 먼 지점으로 채우고
+  8m 이내만 계속 거부
+
+- 원작 1.0.1의 서버 수정 5건 이식. 원작이 **코드를 안 올려서**(태그만 1.0.0 커밋에 추가
+  로 찍음, tree 해시 동일, 배포 DLL은 `1.0.1+c7d6430`인데 그 커밋의 `ModVersion`은
+  `1.0.0`) 배포된 `looseLoot.json`과 `icebreaker-server.dll`에서 역으로 복원함.
+  퀘스트 json 17개는 대조 결과 전부 동일 — 수정은 전부 코드 쪽이었음.
+  자세한 내역은 위 "원작 1.0.1 이식" 참고
+
+- 검증 방식: `looseLoot.json`은 변환 규칙을 배포 파일에서 읽어내 우리 파일에 적용한 뒤
+  505개 스폰포인트 전부 일치를 확인했고(원본 재직렬화가 바이트 동일한 것부터 확인해서
+  diff에 포맷 노이즈 0), 서버 코드는 이식 후 빌드한 DLL의 메타데이터를 공식 1.0.1과
+  대조해 타입·메서드·필드 구성이 완전히 일치함을 확인(차이는 우리 `IcebreakerGoonGuard`
+  와 private 필드명뿐)
+
+- 미이식: fika headless 로딩 크래시 — 클라이언트 쪽이고 이 포크는 fika를 쓰지 않음
+
+---
 
 <26/08/29 상세 변경점>
 
