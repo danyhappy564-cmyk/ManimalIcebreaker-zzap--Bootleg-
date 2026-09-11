@@ -1,3 +1,19 @@
+### ⚠️ IMPORTANT NOTICE / DISCLAIMER
+
+**Original Author:** danauraborealis
+**Original Repository:** ManimalIcebreaker
+**Original Link:** https://github.com/danauraborealis/ManimalIcebreaker
+**License:** MIT
+**This Port By:** R_F (danyhappy564-cmyk) — unofficial, AI-assisted port. Not affiliated with or endorsed by the original author.
+
+1. **Reflection & Take-Downs:** I deeply reflect on the ECOT incident. As an AI-assisted "vibe coder," I will immediately delete files if the original authors ask.
+2. **No Re-Distribution:** These ported builds are unverified, temporary fixes. Please do NOT re-upload or share them anywhere else.
+3. **Do Not Pester Original Authors:** Never report bugs or pester original modders regarding issues from my unofficial ports.
+4. **Full Credit & Respect:** I will always credit original creators on GitHub and prioritize their decisions above all else.
+5. **Support Original Creators:** Instead of using my ports, please visit the original authors' Forge pages to leave kind words or tips.
+
+---
+
 # ManimalIcebreaker (fork)
 
 > **원작자 · 원본 레포**
