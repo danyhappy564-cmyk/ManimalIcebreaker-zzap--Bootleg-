@@ -261,7 +261,7 @@ namespace Manimal.Icebreaker
             // invisible, and clients got the floating-gear ghosts (07-29 probe:
             // forceRenderingOff on body skins, gear clean, damage un-hides). this
             // anchor runs on every peer before any player body builds.
-            if (!Comfort.Common.Singleton<ObservedCullingManager>.Instantiated)
+            if (FikaBridge.CanRender && !Comfort.Common.Singleton<ObservedCullingManager>.Instantiated)
             {
                 new GameObject("Icebreaker_ObservedCullingManager_Fix").AddComponent<ObservedCullingManager>();
                 Plugin.Log.LogWarning("[RaidFix] created missing ObservedCullingManager (observed body visibility)");
@@ -316,16 +316,23 @@ namespace Manimal.Icebreaker
     // renders black with HUD burn-in. so don't fingerprint — gate on the map: if an
     // Icebreaker scene is loaded, discard the scene settings entirely, which makes
     // SetCameraFromPrefab fall back to the game's own built-in "Cam2" from InGameResources.
-    [HarmonyPatch(typeof(EFT.CameraControl.CameraManager), "SetCameraFromSettings")]
-    internal static class Patch_RejectShellCameraPrefab
+    internal sealed class Patch_RejectShellCameraPrefab : SPT.Reflection.Patching.ModulePatch
     {
+        protected override MethodBase GetTargetMethod()
+            => AccessTools.Method(typeof(EFT.CameraControl.CameraManager), "SetCameraFromSettings",
+                new[] { typeof(EFT.CameraControl.CameraManager.ISettings) });
+
+        [SPT.Reflection.Patching.PatchPrefix]
         private static void Prefix(ref EFT.CameraControl.CameraManager.ISettings settings)
         {
-            // gate on GameWorld.LocationId (authoritative; "Suburbs" is our hijacked
+            // Headless still instantiates a camera during its memory cleanup.
+            // Rejecting broken scene settings is required there too, even though
+            // our optional rendering effects must remain disabled.
+            // gate on GameWorld.LocationId (authoritative; IcebreakerLocation.Key is our hijacked
             // slot). vanilla maps: not even a log line — this mod stays silent off-map.
             var world = Comfort.Common.Singleton<GameWorld>.Instance;
             var loc = world != null ? world.LocationId : null;
-            if (!string.Equals(loc, "Suburbs", StringComparison.OrdinalIgnoreCase)) return;
+            if (!string.Equals(loc, IcebreakerLocation.Key, StringComparison.OrdinalIgnoreCase)) return;
 
             var prefab = settings != null && settings.CameraPrefab != null ? settings.CameraPrefab.name : "<null>";
             Plugin.Log.LogDebug($"[RaidFix] SetCameraFromSettings on icebreaker: prefab={prefab}");
@@ -341,7 +348,7 @@ namespace Manimal.Icebreaker
             // now: Cam2 as the CHASSIS (valid core data, boots reliably) + the donor
             // graft (IcebreakerCameraDonor) adding a real 0.16.9 map camera's components
             // and data at runtime, where every ref resolves against live game assets.
-            Plugin.Log.LogDebug("[RaidFix] discarding scene camera prefab — Cam2 chassis + donor graft owns the camera");
+            Plugin.Log.LogDebug("[RaidFix] discarding scene camera prefab — using native Cam2 (also required during headless cleanup)");
             settings = null;
         }
     }
@@ -385,6 +392,7 @@ namespace Manimal.Icebreaker
     {
         private static void Prefix(EffectsController __instance)
         {
+            if (!FikaBridge.CanRender) return;
             if (!IceGate.On) return; // vanilla camera prefabs ship the component
             if (__instance.GetComponent<FrostbiteEffect>() == null)
             {
@@ -591,6 +599,7 @@ namespace Manimal.Icebreaker
     {
         private static void Postfix(Camera camera)
         {
+            if (!FikaBridge.CanRender) return;
             // attach a probe so a full render-env dump can be triggered on demand (F8) once
             // the scene is fully settled — on ANY map. load a working map, press F8, load
             // icebreaker, press F8, diff the two dumps. also auto-dumps once here at setup.
@@ -625,6 +634,7 @@ namespace Manimal.Icebreaker
         // with skybox ambient instead of overriding it) in case it needs a brightness nudge.
         private void Update()
         {
+            if (!FikaBridge.CanRender) return;
             if (Plugin.DiagHotkeys.Value && IceGate.On && Input.GetKeyDown(KeyCode.F8))
             {
                 Dump("F8-manual");
@@ -711,11 +721,15 @@ namespace Manimal.Icebreaker
             // both desaturating Woods and corrupting _iceFrames/_autoRebindStage for the
             // Icebreaker raid after that).
             var onIce = false;
+            // fork: upstream reads GameWorld once and treats "not resolved" as off-ice.
+            // Keep the debounce - see the comment above for why a one-frame gap during a
+            // scene transition must not be read as having left the ship. Location key now
+            // comes from IcebreakerLocation rather than the retired "Suburbs" literal.
             GameWorld w = null;
             try { w = Comfort.Common.Singleton<GameWorld>.Instance; } catch { }
             if (w != null)
             {
-                onIce = string.Equals(w.LocationId, "Suburbs", StringComparison.OrdinalIgnoreCase);
+                onIce = IcebreakerLocation.Matches(w.LocationId);
                 _offIceStreak = onIce ? 0 : OffIceDebounceFrames;
             }
             else
@@ -4064,6 +4078,7 @@ namespace Manimal.Icebreaker
         // restores the division and reports what it changed — zero-count = rip was fine.
         internal static void EnforceShadowProxies()
         {
+            if (!FikaBridge.CanRender) return;
             if (!Plugin.ShadowProxyFix.Value) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int proxiesFixed = 0, visualsFixed = 0;

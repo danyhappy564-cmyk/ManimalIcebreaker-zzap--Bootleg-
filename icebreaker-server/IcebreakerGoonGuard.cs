@@ -58,10 +58,10 @@ public class IcebreakerGoonGuard(
 
         // load order: SPT runs preload IOnLoad components in ASCENDING TypePriority
         // (ProgramExtensions sorts them, then takes everything below GameCallbacks), so
-        // Preload+91000 lands just after IcebreakerMod's Preload+90000 — base.json is
-        // already installed into the Suburbs slot and the rows below are ours, not the
-        // stub's. GoonLocationSpawnService is IOnUpdate and first runs on the 5s update
-        // loop after startup, so this snapshot always precedes the first zeroing pass.
+        // Preload+91000 lands just after IcebreakerMod's Preload+90000 — the location is
+        // already registered and the rows below are ours. GoonLocationSpawnService is
+        // IOnUpdate and first runs on the 5s update loop after startup, so this snapshot
+        // always precedes the first zeroing pass.
         Snapshot();
 
         try
@@ -87,8 +87,12 @@ public class IcebreakerGoonGuard(
         return Task.CompletedTask;
     }
 
+    // upstream 1.1.0 stopped installing the map into the dormant Suburbs slot and
+    // registers an independent location instead, so reading Suburbs here would guard
+    // the vanilla stub's (empty) spawn list and leave our T1 wave to be zeroed after
+    // all. Resolve through the same key the registration uses.
     private static List<BossLocationSpawn>? OurWaves()
-        => _locations?.Suburbs?.Base?.BossLocationSpawn;
+        => _locations?.GetLocation(IcebreakerLocation.Key)?.Base?.BossLocationSpawn;
 
     private static void Snapshot()
     {

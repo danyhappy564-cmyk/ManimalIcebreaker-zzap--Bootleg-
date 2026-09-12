@@ -45,7 +45,6 @@ namespace Manimal.Icebreaker
         // the backstop). IcebreakerWaveBackstop reads it to know which waves still have not
         // been triggered — BossSpawnScenario's own Activated flag is not reachable from here.
         internal static readonly HashSet<string> Raised = new HashSet<string>();
-
         [HarmonyPatch(typeof(GlobalEventDispatcher), nameof(GlobalEventDispatcher.AnyEvent), new[] { typeof(string) })]
         internal static class Patch_LogAnyEvent
         {

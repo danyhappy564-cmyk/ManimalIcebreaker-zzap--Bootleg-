@@ -3,11 +3,36 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Manimal.Icebreaker.Server;
 using Mono.Cecil;
+using System.Text.Json;
 using SPTarkov.Server.Core.Generators.Loot;
 using SPTarkov.Server.Core.Models.Spt.Tables;
 
 // Run without launching EFT or reading/writing any player profiles.
+try
+{
 if (args.Length != 2 && args.Length != 4) throw new ArgumentException("Usage: verification <SPT install> <built client DLL> [Fika install] [built addon DLL]");
+// Reproduce the dictionary contract used by loot mods. Duplicate candidates or
+// distribution keys must fail here instead of dropping all loot at raid load.
+using (var loot = JsonDocument.Parse(File.ReadAllText("icebreaker-server/db/looseLoot.json")))
+{
+    int checkedPools = 0;
+    foreach (var point in loot.RootElement.GetProperty("spawnpoints").EnumerateArray())
+    {
+        var candidates = new Dictionary<string, string>();
+        foreach (var item in point.GetProperty("template").GetProperty("Items").EnumerateArray())
+            candidates.Add(item.GetProperty("composedKey").GetString()!, item.GetProperty("_tpl").GetString()!);
+        var weights = new HashSet<string>();
+        foreach (var weight in point.GetProperty("itemDistribution").EnumerateArray())
+        {
+            var key = weight.GetProperty("composedKey").GetProperty("key").GetString()!;
+            if (!weights.Add(key) || !candidates.ContainsKey(key))
+                throw new Exception("Invalid loose-loot distribution key: " + key);
+        }
+        if (weights.Count != candidates.Count) throw new Exception("Unreferenced loose-loot candidate");
+        checkedPools++;
+    }
+    Check(checkedPools > 0, $"{checkedPools} loose-loot pools have unique candidates and matching weights");
+}
 var metadata = new ModMetadata();
 Check(metadata.SptVersion.IsSatisfied("4.1.5"), "SPT 4.1.5 accepted");
 Check(!metadata.SptVersion.IsSatisfied("4.0.13") && !metadata.SptVersion.IsSatisfied("4.2.0"), "Other SPT minor versions rejected");
@@ -21,11 +46,9 @@ foreach (var (guid, current, previous) in new[] {
     var range = metadata.ModDependencies![guid];
     Check(range.IsSatisfied(current) && !range.IsSatisfied(previous), guid + " version floor");
 }
-var mapLockAttribute = typeof(IcebreakerLockRouter).GetCustomAttributesData()
-    .Single(attribute => attribute.AttributeType.Name == "Injectable");
-var mapLockPriority = (int)mapLockAttribute.NamedArguments
-    .Single(argument => argument.MemberName == "TypePriority").TypedValue.Value!;
-Check(mapLockPriority == SPTarkov.Server.Core.DI.OnLoadOrder.Routers - 1, "Boreas map-lock route priority");
+await ProgressionChecks.Run();
+await FlyerChecks.Run();
+await LocationChecks.Run(args[0]);
 
 // Exercise the real Harmony transpiler against SPT 4.1.5's method body. This
 // catches a missing/changed call target and invalid emitted IL without a raid.
@@ -47,6 +70,23 @@ new Harmony("com.manimal.icebreaker.lootfirewall").UnpatchSelf();
 
 using var game = AssemblyDefinition.ReadAssembly(Path.Combine(args[0], "EscapeFromTarkov_Data", "Managed", "Assembly-CSharp.dll"));
 using var client = AssemblyDefinition.ReadAssembly(args[1]);
+var identityProps = System.Xml.Linq.XDocument.Load("Directory.Build.props").Root!.Element("PropertyGroup")!;
+Check(metadata.Version.ToString() == identityProps.Element("ModVersion")!.Value &&
+      metadata.ModGuid == identityProps.Element("ModGuid")!.Value &&
+      metadata.Author == identityProps.Element("ModUsername")!.Value &&
+      metadata.Name == metadata.Author + identityProps.Element("ModDisplayName")!.Value &&
+      metadata.Url == identityProps.Element("ModSourceUrl")!.Value,
+      "compiled server metadata derives version, identity and source URL from shared properties");
+var clientPlugin = client.MainModule.Types.Single(t => t.BaseType?.FullName == "BepInEx.BaseUnityPlugin");
+var clientMetadata = clientPlugin.CustomAttributes.Single(a => a.AttributeType.FullName == "BepInEx.BepInPlugin");
+Check((string)clientMetadata.ConstructorArguments[0].Value == metadata.ModGuid &&
+      (string)clientMetadata.ConstructorArguments[1].Value == metadata.Author + "-" + identityProps.Element("ModDisplayName")!.Value &&
+      (string)clientMetadata.ConstructorArguments[2].Value == metadata.Version.ToString(),
+      "compiled client and server versions and plugin identity match");
+var locationConstants = client.MainModule.Types.Single(t => t.FullName == "Manimal.Icebreaker.IcebreakerLocation");
+Check((string)locationConstants.Fields.Single(f => f.Name == "Key").Constant == IcebreakerLocationRegistration.Key &&
+      (string)locationConstants.Fields.Single(f => f.Name == "Id").Constant == IcebreakerLocationRegistration.Id,
+      "compiled client location identity matches the server");
 var gameTypes = AllTypes(game.MainModule.Types).ToDictionary(t => t.FullName);
 var stakes = gameTypes["EFT.SynchronizableObjects.TripwireSynchronizableObject"].Methods.Single(m => m.Name == "SetupStakes");
 Check(stakes.Body.Instructions.Any(i => i.Operand is MethodReference m &&
@@ -56,6 +96,15 @@ Check(stakes.Body.Instructions.Any(i => i.Operand is MethodReference m &&
     "Native tripwire SetupStakes uses the repaired CreateItem overload");
 using var fika = args.Length == 4 ? AssemblyDefinition.ReadAssembly(Path.Combine(args[2], "BepInEx", "plugins", "Fika", "Fika.Core.dll")) : null;
 using var addon = args.Length == 4 ? AssemblyDefinition.ReadAssembly(args[3]) : null;
+if (addon != null)
+{
+    var addonPlugin = addon.MainModule.Types.Single(t => t.BaseType?.FullName == "BepInEx.BaseUnityPlugin");
+    var addonMetadata = addonPlugin.CustomAttributes.Single(a => a.AttributeType.FullName == "BepInEx.BepInPlugin");
+    Check((string)addonMetadata.ConstructorArguments[0].Value == metadata.ModGuid + ".fika" &&
+          (string)addonMetadata.ConstructorArguments[1].Value == metadata.Author + "-" + identityProps.Element("ModDisplayName")!.Value + "Fika" &&
+          (string)addonMetadata.ConstructorArguments[2].Value == metadata.Version.ToString(),
+          "compiled optional Fika addon identity and version match");
+}
 if (fika != null)
     foreach (var type in AllTypes(fika.MainModule.Types)) gameTypes[type.FullName] = type;
 int checkedTargets = 0;
@@ -86,17 +135,36 @@ foreach (var attr in patch.CustomAttributes.Where(a => a.AttributeType.FullName 
     }
     checkedTargets++;
 }
-Check(checkedTargets > 30, $"{checkedTargets} client/addon Harmony targets resolve uniquely");
+var cameraSafety = AllTypes(client.MainModule.Types).Single(t => t.Name == "Patch_RejectShellCameraPrefab");
+Check(cameraSafety.BaseType.FullName == "SPT.Reflection.Patching.ModulePatch" &&
+      !cameraSafety.CustomAttributes.Any(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch"), "Camera safety uses SPT ModulePatch without duplicate Harmony registration");
+var safetyPrefix = cameraSafety.Methods.Single(m => m.Name == "Prefix");
+Check(safetyPrefix.CustomAttributes.Any(a => a.AttributeType.Name == "PatchPrefixAttribute") &&
+      !safetyPrefix.Body.Instructions.Any(i => i.Operand is MethodReference m && m.DeclaringType.Name == "FikaBridge" && m.Name == "get_CanRender"),
+      "Camera safety stays active during headless cleanup");
+var cameraTarget = gameTypes["EFT.CameraControl.CameraManager"].Methods.Single(m => m.Name == "SetCameraFromSettings");
+Check(cameraTarget.Parameters.Count == 1 && cameraTarget.Parameters[0].Name == safetyPrefix.Parameters[0].Name &&
+      safetyPrefix.Parameters[0].ParameterType is ByReferenceType byRef && byRef.ElementType.FullName == cameraTarget.Parameters[0].ParameterType.FullName,
+      "Camera safety prefix binds the SPT 4.1 settings parameter");
+checkedTargets++;
+Check(checkedTargets > 30, $"{checkedTargets} client/addon patch targets resolve uniquely");
 
 Check(parameterErrors.Count == 0, "Harmony parameter bindings: " + string.Join("; ", parameterErrors));
-if (fika != null && addon != null) VerifyFika(fika, args[2], args[3]);
+if (fika != null && addon != null) VerifyFika(fika, args[2], args[3], args[1]);
 Console.WriteLine("SPT 4.1 migration verification passed.");
+}
+catch (Exception error)
+{
+    // Report failed checks to the caller without Windows' unhandled-exception UI.
+    Console.Error.WriteLine("Verification failed: " + error);
+    Environment.ExitCode = 1;
+}
 
-static void VerifyFika(AssemblyDefinition fika, string install, string addonPath)
+static void VerifyFika(AssemblyDefinition fika, string install, string addonPath, string clientPath)
 {
     var types = AllTypes(fika.MainModule.Types).ToArray();
     var backend = types.Single(t => t.Name == "FikaBackendUtils");
-    foreach (var name in new[] { "IsServer", "RaidCode", "ServerGuid" })
+    foreach (var name in new[] { "IsServer", "IsHeadless", "RaidCode", "ServerGuid" })
         Check(backend.Properties.Any(p => p.Name == name && p.GetMethod is { IsPublic: true, IsStatic: true }), "Fika host/seed property " + name);
     var coop = types.Single(t => t.Name == "CoopHandler");
     Check(coop.Methods.Count(m => m.Name == "TryGetCoopHandler" && m.IsPublic && m.IsStatic && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.IsByReference) == 1,
@@ -110,8 +178,11 @@ static void VerifyFika(AssemblyDefinition fika, string install, string addonPath
     var context = new System.Runtime.Loader.AssemblyLoadContext("Fika packet verification", isCollectible: true);
     context.Resolving += (_, name) =>
     {
+        // The installed Harmony build targets Unity/Mono. Reuse the server's
+        // .NET-compatible build for reflection-only checks in this .NET runner.
+        if (name.Name == "0Harmony") return typeof(Harmony).Assembly;
         foreach (var directory in new[] { Path.GetDirectoryName(Path.GetFullPath(addonPath))!,
-            Path.Combine(install, "BepInEx", "plugins", "Fika"), Path.Combine(install, "BepInEx", "core"),
+            Path.Combine(install, "BepInEx", "plugins", "Fika"), Path.Combine(install, "BepInEx", "plugins", "spt"), Path.Combine(install, "BepInEx", "core"),
             Path.Combine(install, "EscapeFromTarkov_Data", "Managed") })
         {
             var path = Path.Combine(directory, name.Name + ".dll");
@@ -121,7 +192,56 @@ static void VerifyFika(AssemblyDefinition fika, string install, string addonPath
     };
     try
     {
+        var builtClient = context.LoadFromAssemblyPath(Path.GetFullPath(clientPath));
+        FlyerChecks.Client(builtClient);
+        var cameraPatchType = builtClient.GetType("Manimal.Icebreaker.Patch_RejectShellCameraPrefab", true)!;
+        var cameraPatch = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(cameraPatchType);
+        var cameraMethod = (MethodBase)cameraPatchType.GetMethod("GetTargetMethod", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(cameraPatch, null)!;
+        Check(cameraMethod.Name == "SetCameraFromSettings" && cameraMethod.DeclaringType!.FullName == "EFT.CameraControl.CameraManager", "SPT camera wrapper resolves the live target");
+        var refresh = builtClient.GetType("Manimal.Icebreaker.IcebreakerMapUnlock", true)!
+            .GetMethod("RefreshLocation", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var locationType = refresh.GetParameters()[0].ParameterType;
+        foreach (var (id, enabled, locked, completed, expectedEnabled, expectedLocked) in new[] {
+            ("icebreaker", true, false, false, true, false), // disabled gate from server
+            ("Icebreaker", false, true, false, false, true), // prerequisite not earned
+            ("icebreaker", false, true, true, true, false), // completed since login
+            ("Suburbs", false, true, true, false, true), // never unlock the former slot
+            ("bigmap", false, true, true, false, true) })
+        {
+            var location = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(locationType);
+            locationType.GetField("Id")!.SetValue(location, id);
+            locationType.GetField("Enabled")!.SetValue(location, enabled);
+            locationType.GetField("Locked")!.SetValue(location, locked);
+            refresh.Invoke(null, new object[] { location, completed });
+            Check((bool)locationType.GetField("Enabled")!.GetValue(location)! == expectedEnabled &&
+                  (bool)locationType.GetField("Locked")!.GetValue(location)! == expectedLocked,
+                  $"Built client map refresh: {id}, server enabled={enabled}, completed={completed}");
+        }
         var core = context.LoadFromAssemblyPath(Path.GetFullPath(Path.Combine(install, "BepInEx", "plugins", "Fika", "Fika.Core.dll")));
+        foreach (string name in new[] {
+            "IceGate+Patch_CaptureLocationId", "IceGate+Patch_PhysicsAudit",
+            "IcebreakerMapUnlock+Patch_Show", "IcebreakerMapFare+Patch_ReadyGate",
+            "IcebreakerMapFare+Patch_ConsumeFare", "Keypad.Patch_IcebreakerPasscodes", "Patch_IcebreakerLootDiag",
+            "IcebreakerFlyerUnlock+Patch_BackendCount", "IcebreakerFlyerUnlock+Patch_GameCount", "IcebreakerFlyerUnlock+Patch_Visibility",
+            "IcebreakerFikaCompat+CoopCreatePatch", "IcebreakerFikaCompat+PlayerCreatePatch", "IcebreakerFikaCompat+CoopStopPatch" })
+        {
+            var patchType = builtClient.GetType("Manimal.Icebreaker." + name, true)!;
+            MethodBase? providedTarget = null;
+            if (name.EndsWith("CoopCreatePatch")) providedTarget = core.GetType("Fika.Core.Main.GameMode.CoopGame", true)!.GetMethod("Create", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            if (name.EndsWith("PlayerCreatePatch")) providedTarget = core.GetType("Fika.Core.Main.Players.FikaPlayer", true)!.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly).Single(m => m.Name == "Create");
+            if (name.EndsWith("CoopStopPatch")) providedTarget = core.GetType("Fika.Core.Main.GameMode.CoopGame", true)!.GetMethod("Stop", BindingFlags.Public | BindingFlags.Instance);
+            var instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(patchType);
+            if (providedTarget != null) patchType.GetField("target", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(instance, providedTarget);
+            var targetMethod = (MethodBase)patchType.GetMethod("GetTargetMethod", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(instance, null)!;
+            Check(targetMethod != null && patchType.BaseType!.FullName == "SPT.Reflection.Patching.ModulePatch" &&
+                !patchType.GetCustomAttributesData().Any(a => a.AttributeType.Name == "HarmonyPatch"), "location SPT wrapper resolves without duplicate registration: " + name);
+            foreach (var hook in patchType.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                if (hook.GetCustomAttributesData().Any(a => a.AttributeType.Name is "PatchPrefix" or "PatchPostfix" or "PatchPrefixAttribute" or "PatchPostfixAttribute"))
+                    foreach (var parameter in hook.GetParameters())
+                        if (!parameter.Name!.StartsWith("__"))
+                            Check(targetMethod!.GetParameters().Any(p => p.Name == parameter.Name &&
+                                p.ParameterType == parameter.ParameterType), "location wrapper argument: " + name + "." + parameter.Name);
+        }
         var packetType = context.LoadFromAssemblyPath(Path.GetFullPath(addonPath)).GetType("Manimal.Icebreaker.Fika.IceWorldPacket", throwOnError: true)!;
         var writerType = core.GetType("Fika.Core.Networking.LiteNetLib.Utils.NetDataWriter", true)!;
         var readerType = core.GetType("Fika.Core.Networking.LiteNetLib.Utils.NetDataReader", true)!;

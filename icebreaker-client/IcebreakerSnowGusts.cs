@@ -39,6 +39,7 @@ namespace Manimal.Icebreaker
         // find-or-create.
         internal static void Spawn()
         {
+            if (!FikaBridge.CanRender) return;
             if (UnityEngine.Object.FindObjectOfType<IcebreakerSnowGusts>() != null) return;
             var go = new GameObject("Icebreaker_SnowGusts");
             go.AddComponent<IcebreakerSnowGusts>();
