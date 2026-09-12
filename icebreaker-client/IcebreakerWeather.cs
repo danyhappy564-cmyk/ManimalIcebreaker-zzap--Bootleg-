@@ -60,6 +60,7 @@ namespace Manimal.Icebreaker
 
         public static bool TryBuild()
         {
+            if (!FikaBridge.CanRender) return false;
             if (_marker != null) return true;
             var sc = Sidecar();
             var comps = sc?["components"] as JObject;
@@ -173,9 +174,7 @@ namespace Manimal.Icebreaker
         // hour the recovered Date held). StormStartedEvent escalates the winter state to
         // SetupWinterStorm — BSG's actual blizzard.
         private static bool _stormRaised;
-#if false
-        private static bool _mboitChecked; // only read/written inside the disabled MBOIT block below
-#endif
+        private static bool _mboitChecked;
 
         // 0.16.9 never uses MBOIT so no camera prefab carries the component — but ALL
         // its parts ship in resources.assets (the 4 compute shaders under their real
@@ -305,6 +304,7 @@ namespace Manimal.Icebreaker
 
         public static void TickBlizzard()
         {
+            if (!FikaBridge.CanRender) return;
             var wc = EFT.Weather.WeatherController.Instance;
             if (wc == null || wc.WeatherDebug == null) return;
             IcebreakerSky.TryApply(); // retail atmosphere — one-shot once the sky singleton exists
@@ -319,15 +319,10 @@ namespace Manimal.Icebreaker
             // ships complete identity curves. 0.16.9 never uses this path only because no
             // remap ASSETS exist in its files; the code+shaders are all present.
             var scat = AccessTools.Field(typeof(EFT.Weather.WeatherController), "tod_Scattering_0")?.GetValue(wc) as TOD_Scattering;
-            // MBOIT dead end — no WindowsManager on this map; VolumetricFog&Mist2 carries
-            // the fog now. Kept as a preprocessor-disabled block rather than deleted: 0.16.9
-            // never uses this path only because no remap assets exist in its files, the
-            // code+shaders are all present, so flip this to `#if true` if that ever changes.
-            // (GClass4 -> TODSkyProvider is upstream's 4.1 deobfuscation rename of the
-            // date probe below.)
-#if false
-                bool dateReady = false;
-                try { dateReady = TODSkyProvider.Instance?.CurrentTime?.GameDateTime != null; } catch { }
+            bool dateReady = false;
+            try { dateReady = TODSkyProvider.Instance?.CurrentTime?.GameDateTime != null; } catch { }
+            if (false) // MBOIT dead end — no WindowsManager on this map; VolumetricFog&Mist2 carries the fog now
+            {
                 wc.MBOITFogRemapData = null; // v1 stays dead — only junk ever lived there
                 if (wc.MBOITFogRemapDataV2 == null || wc.MBOITFogRemapDataV2.name != "manimal_fog_remap")
                 {
@@ -370,7 +365,8 @@ namespace Manimal.Icebreaker
                     else
                         Plugin.Log.LogDebug($"[Weather] MBOIT_Scattering bound ok (enabled={mb.enabled})");
                 }
-#else
+            }
+            else
             {
                 // fallback = the proven plain-fog path
                 wc.MBOITFogRemapDataV2 = null;
@@ -381,7 +377,6 @@ namespace Manimal.Icebreaker
                     Plugin.Log.LogWarning("[Weather] MBOIT disarmed (VolumetricFog off or date not ready)");
                 }
             }
-#endif
             // FOG, decoupled from the sky: TOD_Scattering fogs toward the night sky's
             // scattering color (= black -> eats the lamps). GlobalFog is the same
             // depth-based screen fog but blends toward RenderSettings.fogColor — OUR
@@ -1165,6 +1160,7 @@ namespace Manimal.Icebreaker
         [HarmonyPostfix]
         private static void Postfix(EFT.CameraControl.OpticComponentUpdater __instance)
         {
+            if (!FikaBridge.CanRender) return;
             if (!IceGate.On) return; // vanilla maps keep their scattering
             try
             {

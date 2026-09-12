@@ -26,18 +26,11 @@ namespace Manimal.Icebreaker.Server;
 
 public record ModMetadata : IModMetadata
 {
-    public string ModGuid { get; init; } = "com.manimal.icebreaker";
-    public string Name { get; init; } = "ManimalIcebreaker";
-    public string Author { get; init; } = "Manimal";
+    public string ModGuid { get; init; } = BuildInfo.ModGuid;
+    public string Name { get; init; } = BuildInfo.ServerName;
+    public string Author { get; init; } = BuildInfo.Username;
     public List<string>? Contributors { get; init; }
-    // read from the assembly rather than repeated as a literal. forge requires every
-    // version a mod declares to match exactly, and the csproj already feeds ModVersion
-    // (Directory.Build.props) into <Version> — so this stays correct across a bump
-    // instead of silently drifting from the client's BuildInfo.Version.
-    public SemanticVersioning.Version Version { get; init; } =
-        new(typeof(ModMetadata).Assembly.GetName().Version is { } v
-            ? $"{v.Major}.{v.Minor}.{v.Build}"
-            : "0.1.0");
+    public SemanticVersioning.Version Version { get; init; } = new(BuildInfo.Version);
     public SemanticVersioning.Range SptVersion { get; init; } = new("~4.1.5");
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, SemanticVersioning.Range>? ModDependencies { get; init; } = new()
@@ -47,23 +40,19 @@ public record ModMetadata : IModMetadata
         { "com.wtt.commonlib", new SemanticVersioning.Range("~3.0.6") },
         // HARD since 0.2.4: the kordbreach set supplies the C-3 keycard AND the
         // black division dogtags — the tags are the currency for the ragman/skier
-        // quest-reward barters, so without this the barters are unbuyable and BD
+        // dogtag barters, so without this the barters are unbuyable and BD
         // bodies drop nothing. 1.1.4 is the release the tags shipped in.
         { "com.wtt.contentbackport", new SemanticVersioning.Range("~2.0.1") },
         { "com.morebotsapi.tacticaltoaster", new SemanticVersioning.Range("~2.1.1") },
         { "com.blackdiv.tacticaltoaster", new SemanticVersioning.Range("~1.3.1") },
         { "com.manimal.csgas", new SemanticVersioning.Range("~2.0.0") }
     };
-    public string? Url { get; init; }
+    public string? Url { get; init; } = BuildInfo.SourceUrl;
     public bool HasPrepatcher { get; init; } = false;
     public string License { get; init; } = "MIT";
 }
-// rebinds the dormant "Suburbs" location slot to the backported Icebreaker map.
-// suburbs is a shipped stub (disabled, empty scene) with a first-class property on
-// SPT's closed Locations record — hijacking it means every native lookup
-// (GetLocation("suburbs"), GetDictionary, GenerateAll) resolves with zero patching.
-// scene loading is data-driven: Base.Scene points at our preset bundle, which lists
-// the scenes inside our scene bundle; both are served by SPT's bundle system.
+// Register Icebreaker in SPT's location dictionary. Scene loading continues to use
+// the existing preset and scene bundles; Suburbs remains independent.
 [Injectable(TypePriority = OnLoadOrder.Preload + 90000)]
 public class IcebreakerMod(
     LocationTable locationTable,
@@ -79,7 +68,7 @@ public class IcebreakerMod(
     // the retail trigger table's own ceiling — see the cap note in OnLoad
     private const int IcebreakerBotCap = 40;
 
-    // banner captions, written into EVERY global locale the same way the Suburbs
+    // banner captions, written into EVERY global locale the same way the location
     // rebrand above is: english text in every language beats a raw key showing
     // through on the loading screen. keys are "<bannerId> Name"/"<bannerId>
     // Description", matching the ids in base.json's Banners array.
@@ -117,14 +106,10 @@ public class IcebreakerMod(
             return;
         }
 
-        var suburbs = locationTable.Suburbs;
-        if (suburbs is null)
-        {
-            logger.Error("[Icebreaker] Suburbs location slot missing from database — aborting");
-            return;
-        }
-
-        suburbs.Base = newBase;
+        IcebreakerLocationRegistration.EnsureAvailable(locationTable);
+        newBase.Id = IcebreakerLocation.Key;
+        newBase.IdField = IcebreakerLocation.Id;
+        var icebreaker = new SPTarkov.Server.Core.Models.Eft.Common.Location { Base = newBase };
 
         // ALIVE-BOT CAP (2026-08-12): SPT caps concurrent bots per map from
         // configs/bot.json maxBotCap, and an unlisted map silently falls through to
@@ -136,7 +121,7 @@ public class IcebreakerMod(
         // 40 matches the table's own ceiling; terminal needed the same treatment.
         if (botConfig?.MaxBotCap != null)
         {
-            botConfig.MaxBotCap["suburbs"] = IcebreakerBotCap;
+            botConfig.MaxBotCap[IcebreakerLocation.Key] = IcebreakerBotCap;
             logger.Info($"[Icebreaker] alive-bot cap set to {IcebreakerBotCap} (SPT's unlisted-map default of "
                 + $"{botConfig.MaxBotCap.GetValueOrDefault("default", 18)} truncated the late trigger waves)");
         }
@@ -144,7 +129,7 @@ public class IcebreakerMod(
         // screen natively greys the location out for scav raids on it.
         newBase.DisabledForScav = true;
 
-        // the suburbs stub ships base.json ONLY — no loot data files — so the server's
+        // Our new Location needs explicit loot data so the server's
         // raid-start loot generation (LocationLootGenerator.GenerateStaticContainers/
         // GenerateLocationLoot) NREs on null LooseLoot/StaticLoot/StaticContainers.
         // container loot is REAL: db/staticContainers.json carries the 83 retail
@@ -153,8 +138,8 @@ public class IcebreakerMod(
         // blocks/duffles/medcases/toolboxes roll labs loot at labs weights.
         var factory = locationTable.Factory4Day;
         var labs = locationTable.Laboratory;
-        suburbs.StaticAmmo = labs.StaticAmmo;
-        suburbs.AllExtracts = []; // scav extract list — v1 is PMC-only
+        icebreaker.StaticAmmo = labs.StaticAmmo;
+        icebreaker.AllExtracts = []; // scav extract list — v1 is PMC-only
 
         // container loot pools: OUR file (gen_static_loot.py = labs pools + the
         // backported-item additions baked in). labs in-memory is only the fallback —
@@ -168,12 +153,12 @@ public class IcebreakerMod(
         }
         if (ourStaticLoot is not null)
         {
-            suburbs.StaticLoot = new LazyLoad<Dictionary<MongoId, StaticLootDetails>>(() => ourStaticLoot, cacheValue: true);
+            icebreaker.StaticLoot = new LazyLoad<Dictionary<MongoId, StaticLootDetails>>(() => ourStaticLoot, cacheValue: true);
             logger.Info($"[Icebreaker] container loot pools loaded ({ourStaticLoot.Count} container types)");
         }
         else
         {
-            suburbs.StaticLoot = labs.StaticLoot;
+            icebreaker.StaticLoot = labs.StaticLoot;
         }
 
         // loose loot: BSG generates positions server-side per raid — unrecoverable
@@ -205,12 +190,12 @@ public class IcebreakerMod(
             // where per-raid randomisation happens, covering two generator gaps:
             // it never reads GroupPositions and never rolls forced probabilities.
             var json = looseJson;
-            suburbs.LooseLoot = new LazyLoad<LooseLoot>(() => RandomiseLooseLoot(jsonUtil.Deserialize<LooseLoot>(json))!, cacheValue: false);
+            icebreaker.LooseLoot = new LazyLoad<LooseLoot>(() => RandomiseLooseLoot(jsonUtil.Deserialize<LooseLoot>(json))!, cacheValue: false);
             logger.Info("[Icebreaker] authored loose loot loaded (per-raid group positions + forced-spawn rolls)");
         }
         else
         {
-            suburbs.LooseLoot = new LazyLoad<LooseLoot>(() => new LooseLoot
+            icebreaker.LooseLoot = new LazyLoad<LooseLoot>(() => new LooseLoot
             {
                 SpawnpointCount = new SpawnpointCount { Mean = 0, Std = 0 },
                 Spawnpoints = [],
@@ -231,44 +216,46 @@ public class IcebreakerMod(
         }
         if (ourContainers is not null)
         {
-            suburbs.StaticContainers = new LazyLoad<StaticContainerDetails>(() => ourContainers, cacheValue: true);
+            icebreaker.StaticContainers = new LazyLoad<StaticContainerDetails>(() => ourContainers, cacheValue: true);
             logger.Info("[Icebreaker] retail container set loaded (83 instances, labs loot pools)");
         }
         else
         {
             // fall back to factory's containers AND factory pools together — mixing
             // fallback containers with our labs-derived pools crashes loot gen
-            suburbs.StaticContainers = factory.StaticContainers;
-            suburbs.StaticLoot = factory.StaticLoot;
+            icebreaker.StaticContainers = factory.StaticContainers;
+            icebreaker.StaticLoot = factory.StaticLoot;
             logger.Warning($"[Icebreaker] {containersPath} missing/unreadable — factory loot this run, container ids wont match the ship");
         }
 
         // scav raid time settings keyed by map id — clone factory's so lookups resolve
         if (locationConfig.ScavRaidTimeSettings.Maps.TryGetValue("factory4_day", out var factorySettings))
         {
-            locationConfig.ScavRaidTimeSettings.Maps["suburbs"] = cloner.Clone(factorySettings);
+            locationConfig.ScavRaidTimeSettings.Maps[IcebreakerLocation.Key] = cloner.Clone(factorySettings);
         }
+        // Preserve the previous slot's loot balance, including configured overrides.
+        // Explicit entries also support raid-time adjustment's indexed writes.
+        locationConfig.StaticLootMultiplier[IcebreakerLocation.Key] = locationConfig.StaticLootMultiplier.GetValueOrDefault("suburbs", 1);
+        locationConfig.LooseLootMultiplier[IcebreakerLocation.Key] = locationConfig.LooseLootMultiplier.GetValueOrDefault("suburbs", 1);
+        // In 4.1.5 NonMaps only excludes maps from seasonal hostility rewriting.
+        // Suburbs had that exclusion; retain it for our authored crew relationships.
+        // GetLocation and the client map list do not consult this set.
+        locationConfig.NonMaps.Add(IcebreakerLocation.Key);
 
-        // the map screen (and raid summaries etc) show the LOCALE name for the slot,
-        // not Base.Name — rebrand the Suburbs keys in every language so the dot reads
-        // ICEBREAKER. IconX/IconY in base.json place it top-left coastal to match the
-        // live world map. together the slot is visually a first-class location while
-        // keeping Suburbs' first-class plumbing (insurance/scav-time/botgen all resolve
-        // natively — the reason a truly NEW location keeps failing for others).
+        // Each location owns its locale keys; the original Suburbs labels stay intact.
         try
         {
             foreach (var kv in localeTable.Global)
             {
                 kv.Value.AddTransformer(locale =>
                 {
-                    locale["5714dc342459777137212e0b Name"] = "Icebreaker";
-                    locale["Suburbs"] = "Icebreaker";
+                    locale[IcebreakerLocation.Id + " Name"] = "Icebreaker";
+                    locale[IcebreakerLocation.Key] = "Icebreaker";
                     // the map-select card prints the LOCALE description, not
                     // Base.Description — LocationInfoPanel does
-                    // (location._Id + " Description").Localized(), so the slot kept
-                    // advertising suburbs' "commuter areas of Tarkov" under our banner.
-                    // live runs the same ship blurb here as on the banner.
-                    locale["5714dc342459777137212e0b Description"] = IcebreakerBlurb;
+                    // (location._Id + " Description").Localized(). Share the ship
+                    // description with the loading banner.
+                    locale[IcebreakerLocation.Id + " Description"] = IcebreakerBlurb;
                     // the extraction panel prints Settings.Name.Localized() for the row
                     // label (ExitTimerPanel), and the "EXFIL01" tag beside it is generated
                     // from the point's index, not from us. with no locale entry the raw
@@ -285,7 +272,7 @@ public class IcebreakerMod(
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            logger.Warning($"[Icebreaker] locale rebrand failed (map dot will say Suburbs): {e.Message}");
+            logger.Warning($"[Icebreaker] location locales failed: {e.Message}");
         }
 
         // LOADING SCREEN BANNERS. the client reads the Banners array off the location
@@ -320,7 +307,8 @@ public class IcebreakerMod(
             logger.Warning($"[Icebreaker] banner routing failed (loading screens fall back to the default art): {e.Message}");
         }
 
-        logger.Success("[Manimal-Icebreaker] Suburbs slot rebound to Icebreaker — enabled, icon placed, locale rebranded");
+        IcebreakerLocationRegistration.Register(locationTable, icebreaker);
+        logger.Success("[Manimal-Icebreaker] Icebreaker registered as an independent location");
         logger.Info("[Icebreaker] loot isolation armed (suspend/restore) — icebreaker raids run vanilla loot generation; other maps untouched");
     }
 
@@ -382,6 +370,8 @@ public class BlowtorchRegistration(WTTServerCommonLib.WTTServerCommonLib wttComm
 public class IcebreakerQuestRegistration(
     WTTServerCommonLib.WTTServerCommonLib wttCommon,
     LocationTable locationTable,
+    TemplateTable templateTable,
+    TradersTable tradersTable,
     ISptLogger<IcebreakerQuestRegistration> logger) : IOnLoad
 {
     // quest-item spawn points that should yield exactly ONE instance per raid, picked
@@ -405,11 +395,12 @@ public class IcebreakerQuestRegistration(
         // in-raid trader dialogue trees (db/CustomDialogues) — the BTR driver's Boreas
         // conversation. quests point at their tree through the quest's dialogueId.
         await wttCommon.CustomDialogueService.CreateCustomDialogues(assembly);
-        // trader stock we ADD (db/CustomAssortSchemes) — Ragman's Black Division carrier
-        // barter. the offer only becomes visible once Fresh Stock is handed in: that gate
-        // is the QuestAssort mapping shipped alongside the quest, NOT this file. the
-        // AssortmentUnlock reward on the quest is only the "unlocks purchase" UI line.
+        // Dogtag gear barters now use trader loyalty alone, except the Peacekeeper
+        // crate, which still requires Chain of Custody.
         await wttCommon.CustomAssortSchemeService.CreateCustomAssortSchemes(assembly);
+        // Overlay installs can retain deleted quest JSON files. Remove their loaded
+        // templates and locks in memory as well, without touching SPT database files.
+        IcebreakerRetiredQuests.RemoveFromDatabase(templateTable.Quests, tradersTable.Values);
 
         // ONE canister, random spot. CommonLib injected every candidate as a forced
         // spawn (its own LooseLoot transformer), so ours registers AFTER and prunes all
@@ -452,21 +443,12 @@ public class IcebreakerQuestRegistration(
     }
 }
 
-// QUEST VISIBILITY GATES. Boreas Part 1 no longer has one: it starts on Mechanic
-// LL3, which is a TraderLoyalty condition SPT's own quest filter understands, and the
-// poster is now the first OBJECTIVE (hand it over, no found-in-raid) rather than a
-// precondition for the quest appearing.
-//
-// that replaced a custom gate which hid the quest until the flyer was in the profile.
-// it worked, but only by accident of timing: RequestQuestsTemplates is called exactly
-// twice by the client -- at login and after a raid -- so a poster bought on the flea
-// mid-session unlocked nothing until the player happened to run a raid. a native start
-// condition has the same refresh behaviour as every vanilla quest, which is what
-// players already expect.
-//
-// what remains here are the CROSSING gates below, which cannot be expressed natively:
+// Boreas Part 1 is always delivered as a locked template with a native FindItem
+// condition. The client listens for flyer acquisition and hides the locked quest;
+// filtering its template here would prevent instant menu and mid-raid discovery.
+// The other gates are CROSSING gates, which cannot be expressed natively:
 // "you have been to the icebreaker" is not a condition type SPT evaluates.
-[Injectable(TypePriority = OnLoadOrder.Routers - 1)]
+[Injectable(TypePriority = OnLoadOrder.Routers + 1)]
 public class IcebreakerFlyerGateRouter(
     JsonUtil jsonUtil,
     SPTarkov.Server.Core.Controllers.QuestController questController,
@@ -493,10 +475,6 @@ public class IcebreakerFlyerGateRouter(
     // (client-side, IcebreakerMapFare.CostFor). the crossing gate below still applies:
     // it only appears after a crossing made post-Bitter Victory.
     private const string Hangover = "3f8d2c5a9b17e04d6ca8f312";
-    // Ragman wants Black Division kit, and he can only have heard about the ship once
-    // you've actually come back off it — same first-crossing gate as Stick to It, but
-    // an entirely separate trader and chain.
-    private const string FreshStock = "6a752a6bc498772c6a150baf";
     // Therapist's iodide order. same first-crossing gate: the high dose only turns up on
     // the ship, and her surprise at the source ("The Icebreaker?") only lands if she is
     // asking someone who has already been out there.
@@ -505,9 +483,7 @@ public class IcebreakerFlyerGateRouter(
     // helicopter secret") is satisfied for free by this gate: the hard map lock means
     // nobody visits Icebreaker without having finished Boreas P3 first (map reveal).
     private const string OilChange = "6a75661b478c184bd220c433";
-    // Skier's courier bags. part 2 chains off this one natively, so only the opener
-    // needs a crossing gate.
-    private const string PackMule = "6a757a2f478c184bd220c458";
+    private const string Biochemistry = "6a753cf3478c184bd220c426";
     // Peacekeeper's impounded BD container. same first-crossing gate: he opens by asking
     // about "that ship in the bay" and offers to sell you the shipment, which only reads
     // right to someone who has already been out there and seen who is guarding it.
@@ -525,10 +501,9 @@ public class IcebreakerFlyerGateRouter(
         new(StickToIt, null),
         new(BitterVictory, PrivateRoman),
         new(Hangover, BitterVictory),
-        new(FreshStock, null),
         new(WarNeverChanges, null),
         new(OilChange, null),
-        new(PackMule, null),
+        new(Biochemistry, null),
         new(ChainOfCustody, null),
     };
 
@@ -546,53 +521,36 @@ public class IcebreakerFlyerGateRouter(
         IcebreakerRaidWatchRouter.AutoTurnIn(questHelper, profileHelper, eventOutputHolder, sessionID);
 
         var quests = questController.GetClientQuests(sessionID);
-        try
-        {
-            FilterQuests(quests, profileHelper.GetPmcProfile(sessionID), sessionID.ToString(),
-                         IcebreakerRaidWatchRouter.Visits);
-        }
-        catch (Exception e) when (e is not OperationCanceledException) { logger.Warning($"[Icebreaker] quest gate check failed (quests left visible): {e.Message}"); }
+        FilterQuests(quests, profileHelper.GetPmcProfile(sessionID), sessionID.ToString(), IcebreakerRaidWatchRouter.Visits);
         return new ValueTask<string>(httpResponseUtil.GetBody(quests));
     }
 
-    // Stamp the crossing count for any gating quest already finished. Doing it here (not
-    // only at raid end) catches a hand-in made at the trader screen, so the very next
-    // crossing counts toward the gate instead of being eaten by a mark stamped after the
-    // fact.
     public static void MarkFinishedQuests(PmcData? pmc, string sessionId, IcebreakerVisitLedger visits)
     {
         foreach (var gate in CrossingGates)
-        {
-            if (gate.AfterQuest is null) continue;
-            if (pmc?.Quests?.Any(q => q.QId.ToString() == gate.AfterQuest &&
+            if (gate.AfterQuest != null && pmc?.Quests?.Any(q => q.QId.ToString() == gate.AfterQuest &&
                     q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true)
                 visits.MarkQuestFinished(sessionId, gate.AfterQuest);
-        }
     }
 
-    // The gated quests only exist once you have made the crossing and come back. Shared by
-    // the /client/quest/list route and by IcebreakerProgression's QuestHelper patches, so
-    // the gate holds on every path the client can learn about a quest through.
+    // Also used by QuestHelper's item-event quest deltas, so a hand-in cannot
+    // reveal a follow-up before its extra crossing. Only visibility changes here;
+    // saved progress is retained even when an older build exposed a quest early.
     public static void FilterQuests(List<Quest> quests, PmcData? pmc, string sessionId, IcebreakerVisitLedger visits)
     {
+        bool flyerDiscovered = IcebreakerFlyerDiscovery.Observe(pmc);
+        foreach (var quest in quests)
+            if (quest.Id == IcebreakerBoreas.QuestId && !flyerDiscovered)
+                quest.SptStatus = SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Locked;
         MarkFinishedQuests(pmc, sessionId, visits);
-
+        quests.RemoveAll(q => IcebreakerRetiredQuests.Contains(q.Id));
         foreach (var gate in CrossingGates)
         {
-            // Once the player has actually ENGAGED with the quest it is never hidden
-            // again, so an accepted quest cannot be stranded by losing whatever unlocked
-            // it. The old check was "is the row in the profile at all", which every
-            // visible quest satisfies - SPT writes an AvailableForStart row for each one -
-            // so the gate stopped hiding these the moment the trader offered them, which
-            // is exactly the "quests appearing before visiting the map" report. Locked,
-            // AvailableForStart and AvailableAfter all mean "not engaged".
             var entry = pmc?.Quests?.FirstOrDefault(q => q.QId.ToString() == gate.QuestId);
-            bool engaged = entry is not null
-                && entry.Status is not (SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Locked
-                                     or SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableForStart
-                                     or SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableAfter);
-            if (engaged) continue;
-
+            if (gate.AfterQuest != null && entry != null && entry.Status is not (
+                    SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Locked or
+                    SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableForStart or
+                    SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.AvailableAfter)) continue;
             bool earned = gate.AfterQuest is null
                 ? visits.HasVisited(sessionId)
                 : visits.HasVisitedSince(sessionId, gate.AfterQuest);
@@ -629,12 +587,6 @@ public class IcebreakerRaidWatchRouter(
             ),
         ])
 {
-    // The crossing ledger, extracted so IcebreakerProgression can reach it from the
-    // QuestHelper patches without going through this router.
-    internal static readonly IcebreakerVisitLedger Visits = new(
-        SysPath.Combine(SysPath.GetDirectoryName(typeof(IcebreakerRaidWatchRouter).Assembly.Location)!,
-                        "db", "icebreaker_visits.json"));
-
     // quests that hand themselves in. the BTR driver only exists in raid, so a quest
     // whose last objective lands on a map he isn't on would otherwise be unturnable
     // in practice. BSG's own lever for this is dead here: RawQuestClass carries
@@ -695,9 +647,12 @@ public class IcebreakerRaidWatchRouter(
         catch (Exception e) when (e is not OperationCanceledException) { logger?.Warning($"[Icebreaker] auto turn-in failed: {e.Message}"); }
     }
 
-    // Kept as a static so AutoTurnIn's callers do not need the ledger handed to them.
-    public static void MarkQuestFinished(string sessionId, string questId) =>
-        Visits.MarkQuestFinished(sessionId, questId);
+    internal static readonly IcebreakerVisitLedger Visits = new(
+        SysPath.Combine(SysPath.GetDirectoryName(typeof(IcebreakerRaidWatchRouter).Assembly.Location)!,
+                        "db", "icebreaker_visits.json"));
+
+    public static void MarkQuestFinished(string sessionId, string questId)
+        => Visits.MarkQuestFinished(sessionId, questId);
 
     private static ValueTask<string> Watch(
         ISptLogger<IcebreakerRaidWatchRouter> logger,
@@ -707,10 +662,14 @@ public class IcebreakerRaidWatchRouter(
     {
         try
         {
-            // null means this end was not counted - wrong map, no Results block, or a
-            // repeat post for a raid already banked. Only a real new crossing logs.
+            // ANY raid end on our slot counts as a visit — survive, die, MIA, whatever
+            // (user call 08-19: "you can live or die, you just have to go there"). the
+            // gated quests are all "you have seen the ship" beats, and a corpse on the
+            // deck has very much seen the ship. the one exclusion left is a raid that
+            // never really started (the client posts an end even when loading aborts,
+            // with no Results block) — no Results = no visit.
             var total = Visits.RecordRaidEnd(sessionID.ToString(), info);
-            if (total is not null)
+            if (total.HasValue)
                 logger.Info($"[Icebreaker] icebreaker visit recorded, outcome {info.Results!.Result} (crossing #{total})");
         }
         catch (Exception e) when (e is not OperationCanceledException) { logger.Warning($"[Icebreaker] raid watch failed: {e.Message}"); }
@@ -724,7 +683,7 @@ public class IcebreakerRaidWatchRouter(
 // Mod StaticRouters run after core's for the same route and receive its output; we
 // recompute the response with the per-profile flag instead of editing serialized JSON.
 // Gate config: db/maplock.json { "finalQuestId": "..." }.
-[Injectable(TypePriority = OnLoadOrder.Routers - 1)]
+[Injectable(TypePriority = OnLoadOrder.Routers + 1)]
 public class IcebreakerLockRouter(
     JsonUtil jsonUtil,
     SPTarkov.Server.Core.Controllers.LocationController locationController,
@@ -742,10 +701,7 @@ public class IcebreakerLockRouter(
             ),
         ])
 {
-    // Boreas Part 3. Defaulted rather than left null: a missing or unreadable
-    // db/maplock.json used to mean "no quest id", which skipped the whole block and left
-    // the map permanently visible - the lock silently did nothing.
-    private static string? _finalQuestId = "9d5e3f7d6320a7fd139a2772";
+    private static string? _finalQuestId;
     private static bool _configLoaded;
 
     private static string? FinalQuestId(ISptLogger<IcebreakerLockRouter> logger)
@@ -756,18 +712,25 @@ public class IcebreakerLockRouter(
         {
             var modDir = SysPath.GetDirectoryName(typeof(IcebreakerLockRouter).Assembly.Location)!;
             var path = SysPath.Combine(modDir, "db", "maplock.json");
-            if (System.IO.File.Exists(path))
-            {
-                var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
-                if (doc.RootElement.TryGetProperty("finalQuestId", out var element))
-                    _finalQuestId = element.GetString();
-            }
+            _finalQuestId = ReadQuestId(System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null);
         }
         catch (Exception e)
         {
+            _finalQuestId = "9d5e3f7d6320a7fd139a2772";
             logger.Warning($"[Icebreaker] map lock config unreadable; using Boreas Part 3: {e.Message}");
         }
         return _finalQuestId;
+    }
+
+    // Missing file/key, null or blank explicitly disables the gate. Malformed
+    // JSON is handled separately, so a typo does not silently unlock the map.
+    public static string? ReadQuestId(string? json)
+    {
+        if (json == null) return null;
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("finalQuestId", out var element)) return null;
+        var id = element.GetString();
+        return string.IsNullOrWhiteSpace(id) ? null : id.Trim();
     }
 
     private static ValueTask<string> LockLocations(
@@ -778,36 +741,24 @@ public class IcebreakerLockRouter(
         ISptLogger<IcebreakerLockRouter> logger,
         MongoId sessionID)
     {
-        // GenerateAll hands back LocationBase instances that are SHARED with the database,
-        // and the old code wrote Enabled/Locked straight onto them. That is a per-profile
-        // answer stamped onto global state: whichever profile asked last owned the flag,
-        // so finishing Boreas Part 3 could leave the map still locked because another
-        // profile's lookup had already written the map shut - and a lock taken around the
-        // mutation could only serialise the damage, not prevent it. Clone first and edit
-        // the copy; nothing outside this response is touched, and the lock is gone with it.
+        // GenerateAll returns shared DB objects. Clone before applying profile flags:
+        // another profile's map-list or raid-start request must never see them.
         var response = cloner.Clone(locationController.GenerateAll(sessionID));
         var questId = FinalQuestId(logger);
-        if (string.IsNullOrEmpty(questId))
-            return new ValueTask<string>(httpResponseUtil.GetBody(response));
-
-        try
+        if (!string.IsNullOrEmpty(questId))
         {
             bool unlocked = IsUnlocked(profileHelper.GetPmcProfile(sessionID), questId);
             foreach (var location in response.Locations!.Values)
             {
-                if (location?.IdField.ToString() != "5714dc342459777137212e0b") continue;
+                if (location?.IdField.ToString() != IcebreakerLocation.Id) continue;
                 location.Enabled = unlocked;
                 location.Locked = !unlocked;
             }
         }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            logger.Warning($"[Icebreaker] map lock check failed (leaving unlocked): {e.Message}");
-        }
         return new ValueTask<string>(httpResponseUtil.GetBody(response));
     }
 
-    public static bool IsUnlocked(PmcData? pmc, string questId) =>
-        pmc?.Quests?.Any(q => q.QId.ToString() == questId &&
+    public static bool IsUnlocked(PmcData? pmc, string questId)
+        => pmc?.Quests?.Any(q => q.QId.ToString() == questId &&
             q.Status == SPTarkov.Server.Core.Models.Enums.QuestStatusEnum.Success) == true;
 }

@@ -25,10 +25,11 @@
 > 여기서 한 건 실사용 중에 잡힌 성능/크래시 문제를 고쳐서 얹은 것뿐입니다.
 > 기능 추가나 밸런스 변경은 없습니다.
 
-현재 기준: **upstream 1.0.0 + 1.0.1 서버 수정 이식 / SPT 4.1.5**
+현재 기준: **upstream 1.1.0 / SPT 4.1.5**
 
-> 원작 1.0.1은 코드가 GitHub에 올라오지 않았습니다 (태그만 1.0.0 커밋에 추가로 찍힘).
-> 배포된 DLL에서 변경분을 복원해 이식했고, 근거는 아래 [원작 1.0.1 이식](#원작-101-이식)에 있습니다.
+> **1.1.0 동기화 (09/12).** 원작이 1.1.0을 올리면서, 우리가 DLL에서 역으로 복원했던
+> 1.0.1 서버 수정을 **진짜 소스로 공개**했습니다. 그 부분은 우리 복원본을 버리고
+> 원작 소스로 교체했습니다. 자세한 대조는 아래 [1.1.0 동기화](#110-동기화)에 있습니다.
 
 ---
 
@@ -55,20 +56,19 @@ IcebreakerOpticWeather, 트립와이어 재작성, CustomSpawnpoints)이고, 아
 |---|---|
 | `IcebreakerGoonGuard` (신규, 09/07) | SPT 4.1의 군즈 로테이션이 T1 웨이브를 0%로 죽임 |
 | `IcebreakerWaveBackstop` (신규, 09/08) | 엔진룸·선미 트리거 박스를 우회하면 그 구역이 통째로 비어 있다가 한참 뒤에 스폰됨 |
-| `looseLoot.json` 중복 엔트리 제거 (09/08) | 한 스폰포인트에 같은 `composedKey` 가 두 번 — Lots of Loot 등에서 루팅 생성 실패 (원작 1.0.1과 동일 결과 검증) |
 | T4 스폰 지점 폴백 (09/08) | 시야 밖 지점 5개를 못 찾으면 스쿼드 전체를 미뤄서 앰부시가 늦게 도착 |
 | `IcebreakerSnowGusts` 중복 생성 가드 | 라이드당 최대 12번 중복 생성, 프레임의 90%+ 점유 |
 | `BreathEffector` 파이널라이저 | NRE 5500+회 스팸으로 크래시 |
 | onIce 디바운스 + off-ice 정착 가드 | 쇄빙선 나간 뒤 다른 맵에서 쇄빙선 로직이 계속 돎 |
 | `PatrolScanner` 좁은 방 폴백 | 좁은 구역에서 봇이 그 자리에 못 박힘 |
-| `OrbitBrainLayerCompat` | ORBIT이 `Suburbs`를 몰라서 던지는 예외가 우리 AI 레이어 생성까지 같이 죽임 |
+| `OrbitBrainLayerCompat` | ORBIT이 이 맵을 몰라서 던지는 예외가 우리 AI 레이어 생성까지 같이 죽임 |
 | `base.json` 중복 `BossLocationSpawn` 7개 제거 | 같은 스쿼드가 트리거마다 두 번씩 스폰 (라이드당 봇 29마리 여분) |
 
-**원작 1.0.1 백포트** (우리 수정이 아니라 원작자의 수정입니다)
+**1.1.0에서 원작이 직접 고쳐 우리 것을 버린 것**
 
-퀘스트 게이트 우회 2건, 보레아스 3부 맵 언락 실패, 라이드 종료 중복 카운트,
-`looseLoot.json` 중복 엔트리 — 원작이 코드를 안 올려서 배포 파일에서 복원했습니다.
-→ [원작 1.0.1 이식](#원작-101-이식)
+`looseLoot.json` 중복 엔트리, 그리고 우리가 배포 DLL에서 복원했던 1.0.1 서버 수정
+전체(퀘스트 게이트 2건, 보레아스 3부 언락, 라이드 종료 중복 카운트, 방문 원장)는
+원작 1.1.0이 진짜 소스로 공개하면서 그쪽으로 교체했습니다. → [1.1.0 동기화](#110-동기화)
 
 **설정 차이**
 
@@ -177,6 +177,63 @@ dotnet build ManimalIcebreaker.sln
 
 검증: 이식 후 빌드한 DLL을 공식 1.0.1 DLL과 메타데이터 단위로 대조 → **타입·메서드·필드
 구성 완전 일치** (차이는 우리 `IcebreakerGoonGuard` 와 private 필드명뿐).
+
+---
+
+## 1.1.0 동기화
+
+원작 1.1.0(`728ea51`, 09/12)을 머지했습니다. 원작이 히스토리를 재작성해서 3-way 머지의
+공통 조상이 4.1 이전으로 잡혔고, 그 탓에 충돌이 27개 파일에서 났습니다. 파일마다
+"원작이 이걸 이미 고쳤나"를 따져서 하나씩 판정했습니다.
+
+### 원작이 대신 고쳐서 우리 것을 버린 것
+
+| 우리가 했던 것 | 원작 1.1.0 |
+|---|---|
+| `looseLoot.json` 중복 `composedKey` 제거 | 원작이 직접 수정 (`loose loot duplicate key fix`) — 머지 후 중복 **0건** 재확인 |
+| 1.0.1 서버 수정 DLL 복원 (`IcebreakerProgression`, `IcebreakerVisitLedger`) | 원작이 진짜 소스 공개. **원작 것이 상위 호환** — 우리 패치 2개를 포함하고 `QuestHelper.FailedUnlocked` 패치가 추가됐으며, raw Harmony 대신 SPT의 `AbstractPatch`를 씀 |
+| — | fika headless/MP 로딩 수정 (`FikaBridge.CanRender` 가드). 우리가 "범위 밖"이라고 미뤘던 항목 |
+| — | **Suburbs 슬롯 하이재킹을 폐기**하고 고유 location ID(`icebreaker` / `882b2fa04bbd616567022938`) 등록으로 전환 |
+
+### 우리 수정 중 아직 원작에 없어서 유지한 것
+
+성능 5건(`BuildDistanceCuller` 프레임 분산, 봇 폴링 `FindObjectsOfType` 제거, 렌즈 플레어
+할당 제거, LOD 재계산 예산제, `AICorePoint` 캐싱)과 크래시·버그 6건(`IcebreakerGoonGuard`,
+`IcebreakerWaveBackstop`, T4 스폰 폴백, `IcebreakerSnowGusts` 중복 가드, `BreathEffector`
+파이널라이저, onIce 디바운스, `PatrolScanner` 좁은 방 폴백, `OrbitBrainLayerCompat`)은
+1.1.0에도 들어있지 않아 전부 유지했습니다. 설정 차이(`EscapeTimeLimit` 90분,
+`DeployToGame` 기본 `true`)도 그대로입니다.
+
+### location ID 전환 때문에 우리가 고쳐야 했던 것
+
+원작이 Suburbs 슬롯을 더 이상 쓰지 않게 되면서, **거기에 의존하던 우리 코드가
+조용히 엉뚱한 위치를 보게 됩니다.** 두 군데였습니다.
+
+- `IcebreakerGoonGuard.OurWaves()` 가 `locationTable.Suburbs.Base.BossLocationSpawn` 을
+  읽고 있었습니다. 그대로 두면 바닐라 Suburbs 스텁(비어 있음)을 지키게 되고, 정작
+  우리 T1 나이트 웨이브는 SPT 군즈 로테이션에 그대로 0%로 죽습니다.
+  → `locationTable.GetLocation(IcebreakerLocation.Key)` 로 교체.
+- `RaidFixPatches` 의 onIce 판정이 `"Suburbs"` 리터럴이었습니다.
+  → `IcebreakerLocation.Matches()` 로 교체 (디바운스 로직 자체는 유지).
+
+`IceGate` 는 원작이 이미 `IcebreakerLocation.Key` 로 옮겨놔서, 거기에 매달린 SAIN/ORBIT
+호환 패치들은 자동으로 따라갑니다.
+
+### 둘 다 필요했던 곳
+
+`IcebreakerSnowGusts.Spawn()` — 원작은 `FikaBridge.CanRender` 가드를, 우리는 중복 생성
+가드를 같은 자리에 넣었습니다. 서로 다른 목적이라 **둘 다** 남겼습니다.
+
+### 검증
+
+- 서버 프로젝트 빌드 성공 (에러 0). 남은 경고는 전부 원작 코드의 기존 nullable 경고.
+- `verification` 프로젝트 빌드 성공. 다만 전체 실행은 SPT 설치본 + 빌드된 클라 DLL이
+  필요해서 이 환경에서는 못 돌렸습니다.
+- 클라 프로젝트는 `UnityEngine.AIModule` 등 게임 어셈블리 11개가 있어야 해서 여기서
+  빌드 불가 → **Roslyn 문법 파싱으로 전량 검사**했고, 빌드 대상 소스는 전부 통과했습니다
+  (`docs/wedge-ai-src/` 의 디컴파일 덤프 11개만 파싱 실패, 빌드 대상 아님).
+- `looseLoot.json` 중복 0건, `base.json` 중복 `BossLocationSpawn` 0건,
+  `EscapeTimeLimit` 90 유지 확인.
 
 ---
 

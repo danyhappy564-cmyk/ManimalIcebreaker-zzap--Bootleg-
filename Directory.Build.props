@@ -1,12 +1,17 @@
 <Project>
   <!-- single source of truth for version + identity, per manimal mod conventions -->
   <PropertyGroup>
-    <ModVersion>1.0.0</ModVersion>
+    <ModVersion>1.1.0</ModVersion>
     <ModGuid>com.manimal.icebreaker</ModGuid>
     <ModUsername>Manimal</ModUsername>
     <ModDisplayName>Icebreaker</ModDisplayName>
+    <ModSourceUrl>https://github.com/danauraborealis/ManimalIcebreaker</ModSourceUrl>
+    <ModLocationKey>icebreaker</ModLocationKey>
+    <ModLocationId>882b2fa04bbd616567022938</ModLocationId>
+    <Authors>$(ModUsername)</Authors>
+    <RepositoryUrl>$(ModSourceUrl)</RepositoryUrl>
     <!-- fork note: upstream defaults these to its author's D:\SPT41Dev layout. Pointed at
-         this fork's SPT 4.1.5 install instead. All four stay Condition-guarded, so
+         this fork's SPT 4.1.5 install instead. All of them stay Condition-guarded, so
          -p:SPTPath=... (or a matching environment variable) still wins on any machine. -->
     <SPTPath Condition="'$(SPTPath)' == ''">E:\SPT 4.1</SPTPath>
     <SPTServerPath Condition="'$(SPTServerPath)' == ''">$(SPTPath)\SPT_Runtime</SPTServerPath>
