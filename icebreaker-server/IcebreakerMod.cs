@@ -45,10 +45,16 @@ public record ModMetadata : IModMetadata
         { "com.wtt.contentbackport", new SemanticVersioning.Range("~2.0.1") },
         { "com.morebotsapi.tacticaltoaster", new SemanticVersioning.Range("~2.1.1") },
         { "com.blackdiv.tacticaltoaster", new SemanticVersioning.Range("~1.3.1") },
-        { "com.manimal.csgas", new SemanticVersioning.Range("~2.0.0") },
-        // Boreas Part 6 counts kills in the retail q14_10_kill_ice zone, which only
-        // exists on the backported Interchange map
-        { "com.manimal.interchange", new SemanticVersioning.Range("~1.0.0") }
+        { "com.manimal.csgas", new SemanticVersioning.Range("~2.0.0") }
+        // fork note: upstream 1.1.3 also requires com.manimal.interchange ~1.0.0 here.
+        // Dropped. It exists only so Boreas Part 6 can ALSO be done on the backported
+        // Interchange: 1.1.3 widened that objective's InZone list from
+        // ["boreas_camp_resort"] to ["boreas_camp_resort", "q14_10_kill_ice"], and InZone
+        // is an OR - the Shoreline zone the quest shipped with before 1.1.3 still
+        // completes it. Making a whole mod refuse to load over a second, optional kill
+        // spot is not a trade this fork wants, especially with more than one Interchange
+        // backport in circulation. The zone id stays in the quest, so it still counts for
+        // anyone whose Interchange variant provides it.
     };
     public string? Url { get; init; } = BuildInfo.SourceUrl;
     public bool HasPrepatcher { get; init; } = false;
