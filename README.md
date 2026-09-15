@@ -285,17 +285,66 @@ dotnet build ManimalIcebreaker.sln
 - **JSON 전수 파싱** — 53개 전부 정상
 - **중괄호 균형** — 수정된 6개 소스 전부 균형
 
+### ⚠️ 1.1.3이 추가한 새 하드 의존성
+
+상류가 의존성을 하나 더 걸었습니다. **없으면 모드가 로드되지 않습니다.**
+
+```csharp
+// icebreaker-server/IcebreakerMod.cs
+// Boreas Part 6 counts kills in the retail q14_10_kill_ice zone, which only
+// exists on the backported Interchange map
+{ "com.manimal.interchange", new SemanticVersioning.Range("~1.0.0") }
+
+// icebreaker-client/Plugin.cs
+[BepInDependency("com.manimal.interchange", "1.0.0")]
+[BepInDependency("com.arys.unitytoolkit")]
+```
+
+- **`com.manimal.interchange` ~1.0.0** — Interchange 백포트 모드. Boreas 6부 퀘스트가
+  리테일 `q14_10_kill_ice` 존에서 처치 수를 세는데, 그 존은 백포트된 인터체인지 맵에만
+  있습니다.
+- **`com.arys.unitytoolkit`** — 신규
+
+인터체인지 백포트가 설치돼 있지 않거나 버전이 안 맞으면 아이스브레이커가 통째로 안
+켜집니다. 1.1.0에서는 없던 요구사항입니다.
+
 ### 검증하지 못한 것
 
 **컴파일은 못 해봤습니다.** 이번 작업 환경에 .NET SDK가 없고, 설치처가 네트워크
 정책으로 막혀 있습니다. 위 검증은 정적 대조이며 빌드를 대신하지 못합니다.
 **빌드와 실제 레이드 확인은 직접 하셔야 합니다.**
 
+### 상류가 우리보다 잘 고친 것 — `IcebreakerGoonGuard.cs` 삭제
+
+이 포크가 09/07에 만든 `IcebreakerGoonGuard` 는 SPT 4.1의 `GoonLocationSpawnService`
+가 모든 맵의 `bossKnight` 행을 0%로 밀어버려 T1 기사 웨이브가 영영 안 오던 문제를
+고친 것이었습니다.
+
+**상류가 1.1.3에서 같은 문제를 더 넓게 고쳤습니다.** `IcebreakerLootFirewall` 안의
+`GoonRotationPatch` 인데, 패치 이름까지 `.goonguard` 로 똑같습니다.
+
+| | 이 포크 `GoonGuard` | 상류 `GoonRotationPatch` |
+|---|---|---|
+| 대상 메서드 | `GoonLocationSpawnService.AdjustGoonMapSpawns` | 동일 |
+| 복원 시점 | 로테이션 postfix **1곳** | 로테이션 postfix + **레이드 시작 백스톱 2곳** |
+| 복원값 | `base.json` 스냅샷 | 하드코딩 `100` |
+| 클론 순서 | 미고려 | **고려함** |
+
+상류 주석이 짚은 지점이 우리가 놓친 것입니다 — `StartLocalRaid` 가 로트 생성 **전에**
+로케이션을 복제하기 때문에, 로트 생성 시점에만 복원하면 그 판은 이미 늦고 다음 판부터
+고쳐집니다. 그래서 상류는 **0%로 미는 코드 바로 뒤에** 복원을 붙였습니다.
+
+복원값이 하드코딩인 건 이 포크보다 못한 유일한 점인데, `base.json` 의 `bossKnight`
+`BossChance` 가 **정확히 100** 이라 실질 차이가 없습니다.
+
+둘 다 두면 같은 메서드에 postfix가 두 번 걸리고, `base.json` 을 수정했을 때 서로 다른
+값을 써넣으며 싸우게 됩니다. **이 포크 파일을 삭제했습니다.** 참조하던 곳이 없는 것을
+전수 검색으로 확인했습니다(DI 자동 등록만 쓰고 있었음).
+
 ### 유지한 이 포크의 수정
 
 | 파일 | 상태 |
 |---|---|
-| `IcebreakerGoonGuard.cs` | 유지 (상류에 없음) |
 | `IcebreakerWaveBackstop.cs` | 유지 (상류에 없음) |
 | `IcebreakerCompatPatches.cs` | 유지 |
 | `IcebreakerSnowGusts` 가드 2개 | 유지 |
@@ -303,6 +352,7 @@ dotnet build ManimalIcebreaker.sln
 | `Directory.Build.props` 경로 오버라이드 | 유지 (상류 `ModVersion 1.1.3` 은 수용) |
 | `ragman` / `skier` 중국어 로케일 | 유지 (상류 번역 PR이 다루지 않은 상인) |
 | `AllBotOwners()` 헬퍼 | **삭제** — 상류 `LiveBots()` 가 더 넓게 처리 |
+| `IcebreakerGoonGuard.cs` | **삭제** — 상류 `GoonRotationPatch` 가 더 넓게 처리 |
 
 ---
 
