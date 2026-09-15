@@ -55,28 +55,42 @@ namespace Manimal.Icebreaker
         // floor. The 40m approach guards deliberately reach across decks and stay unbanded.
         private const float SameDeck = 3.5f;
 
+        // A tier guard stays disarmed until the tier before it has actually been raised.
+        //
+        // Without this the first 09-15 build fired T3 at t=89s on a raid whose authored box
+        // did not fire until t=328s - four minutes early, and before T2 (t=201s) had even
+        // happened. 12m and a deck band were not enough on their own, because the route out
+        // to the wedge approach passes within 11m of that zone's markers long before the
+        // player is meant to be committing to it.
+        //
+        // The authored order is the same every raid: T1 -> T2 -> T3 -> T4 (09-15: 53 / 201 /
+        // 328 / 422s; 09-08: 48 / 239 / 276 / 518s). Requiring the predecessor turns the
+        // backstop back into what it is supposed to be - a catch for a box the player walked
+        // around - instead of a second, earlier trigger for a box they simply have not
+        // reached yet. Hide and Sten are not tiered and need no prerequisite.
         private sealed class Guard
         {
             internal readonly string Family;   // GroupSizeEventLogic.TableFor keyword, or null
             internal readonly string SingleId; // authored event id when there is no family
+            internal readonly string Prereq;   // event id that must be raised first, or null
             internal readonly string Label;
             internal readonly string[] Zones;
             internal readonly float Radius;
             internal readonly float MaxDeltaY; // float.MaxValue = no band, measure as a sphere
             internal bool Done;
-            internal Guard(string family, string singleId, float radius, float maxDeltaY, string label, params string[] zones)
+            internal Guard(string family, string singleId, string prereq, float radius, float maxDeltaY, string label, params string[] zones)
             {
-                Family = family; SingleId = singleId; Radius = radius; MaxDeltaY = maxDeltaY;
-                Label = label; Zones = zones;
+                Family = family; SingleId = singleId; Prereq = prereq;
+                Radius = radius; MaxDeltaY = maxDeltaY; Label = label; Zones = zones;
             }
         }
 
         private static readonly Guard[] Guards =
         {
-            new Guard("Hide", null, ApproachRadius, float.MaxValue, "engine room", "BotZoneEngineHide"),
-            new Guard("Sten", null, ApproachRadius, float.MaxValue, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
-            new Guard(null, "T3", ArrivedRadius, SameDeck, "wedge approach", "BotZoneOutside_t3"),
-            new Guard(null, "T4", ArrivedRadius, SameDeck, "top deck", "BotZoneInside_t4"),
+            new Guard("Hide", null, null, ApproachRadius, float.MaxValue, "engine room", "BotZoneEngineHide"),
+            new Guard("Sten", null, null, ApproachRadius, float.MaxValue, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
+            new Guard(null, "T3", "T2", ArrivedRadius, SameDeck, "wedge approach", "BotZoneOutside_t3"),
+            new Guard(null, "T4", "T3", ArrivedRadius, SameDeck, "top deck", "BotZoneInside_t4"),
         };
 
         internal static void ResetForRaid()
@@ -101,6 +115,13 @@ namespace Manimal.Icebreaker
                 foreach (var g in Guards)
                 {
                     if (g.Done) continue;
+
+                    // Not armed yet, but still outstanding - keep the loop alive for it.
+                    if (g.Prereq != null && !IcebreakerAIPlaces.Raised.Contains(g.Prereq))
+                    {
+                        remaining++;
+                        continue;
+                    }
 
                     (int, int, string)[] table = null;
                     if (g.Family != null)
