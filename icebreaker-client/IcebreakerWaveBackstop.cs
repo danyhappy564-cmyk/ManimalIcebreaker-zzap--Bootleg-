@@ -33,28 +33,50 @@ namespace Manimal.Icebreaker
         // 156m to the stern), so a raid can never open with the backstop already tripped.
         private const float ApproachRadius = 40f;
 
-        // Only the two the player reported, and only these two on purpose. They are the
-        // group-size triggers with a single box each and their zones sit alone at the far
-        // end of the ship, so 40m is unambiguous. The wedge box is inside the rooms it
-        // fills (4-16m) and the T1/T3/T4 boxes gate tier progression on the mandatory
-        // route - a proximity backstop there would fire them EARLIER than authored and
-        // rearrange the choreography for a problem nobody has.
+        // Hide and Sten get the approach radius: they are group-size families with a single
+        // box each, their zones sit alone at the far end of the ship, and the box is authored
+        // tens of metres short of the squad, so 40m is unambiguous.
+        //
+        // T3 and T4 are a different shape and needed a second, much tighter radius (added
+        // 2026-09-15). They are one authored id each rather than a group-size family, and
+        // their box sits in or at the room they fill instead of out on the approach. Backing
+        // them up at ApproachRadius would raise them from the deck below - EARLIER than
+        // authored - and rearrange the choreography. At 12m the player is already in the
+        // space and can see it is empty, so the squad arrives late rather than never. That
+        // is the trade the player asked for: on 09-15 the wedge-approach squad only turned
+        // up once he was climbing to the third deck, and on the next raid the top deck squad
+        // never came at all.
+        private const float ArrivedRadius = 12f;
+
+        // A sphere reaches through a deck. Decks here are ~3-4m apart, so a 12m sphere round
+        // a marker on the top deck also covers the floor below it and would fire T4 while the
+        // player is still on the stairs - the early raise the paragraph above is trying to
+        // avoid. Band the tight guards to roughly one deck so "close" means close on the same
+        // floor. The 40m approach guards deliberately reach across decks and stay unbanded.
+        private const float SameDeck = 3.5f;
+
         private sealed class Guard
         {
-            internal readonly string Family;   // GroupSizeEventLogic.TableFor keyword
+            internal readonly string Family;   // GroupSizeEventLogic.TableFor keyword, or null
+            internal readonly string SingleId; // authored event id when there is no family
             internal readonly string Label;
             internal readonly string[] Zones;
+            internal readonly float Radius;
+            internal readonly float MaxDeltaY; // float.MaxValue = no band, measure as a sphere
             internal bool Done;
-            internal Guard(string family, string label, params string[] zones)
+            internal Guard(string family, string singleId, float radius, float maxDeltaY, string label, params string[] zones)
             {
-                Family = family; Label = label; Zones = zones;
+                Family = family; SingleId = singleId; Radius = radius; MaxDeltaY = maxDeltaY;
+                Label = label; Zones = zones;
             }
         }
 
         private static readonly Guard[] Guards =
         {
-            new Guard("Hide", "engine room", "BotZoneEngineHide"),
-            new Guard("Sten", "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
+            new Guard("Hide", null, ApproachRadius, float.MaxValue, "engine room", "BotZoneEngineHide"),
+            new Guard("Sten", null, ApproachRadius, float.MaxValue, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
+            new Guard(null, "T3", ArrivedRadius, SameDeck, "wedge approach", "BotZoneOutside_t3"),
+            new Guard(null, "T4", ArrivedRadius, SameDeck, "top deck", "BotZoneInside_t4"),
         };
 
         internal static void ResetForRaid()
@@ -67,7 +89,6 @@ namespace Manimal.Icebreaker
             var wait = new WaitForSeconds(0.5f);
             var markers = new Dictionary<string, List<Vector3>>();
             var humans = new List<Player>();
-            float radiusSqr = ApproachRadius * ApproachRadius;
 
             while (true)
             {
@@ -81,12 +102,21 @@ namespace Manimal.Icebreaker
                 {
                     if (g.Done) continue;
 
-                    var table = GroupSizeEventLogic.TableFor(g.Family);
-                    if (table == null) { g.Done = true; continue; }
+                    (int, int, string)[] table = null;
+                    if (g.Family != null)
+                    {
+                        table = GroupSizeEventLogic.TableFor(g.Family);
+                        if (table == null) { g.Done = true; continue; }
 
-                    // The box (or an earlier backstop pass) already raised one of this
-                    // family's ids - the wave is on its way, nothing to back up.
-                    if (table.Any(t => IcebreakerAIPlaces.Raised.Contains(t.Item3)))
+                        // The box (or an earlier backstop pass) already raised one of this
+                        // family's ids - the wave is on its way, nothing to back up.
+                        if (table.Any(t => IcebreakerAIPlaces.Raised.Contains(t.Item3)))
+                        {
+                            g.Done = true;
+                            continue;
+                        }
+                    }
+                    else if (IcebreakerAIPlaces.Raised.Contains(g.SingleId))
                     {
                         g.Done = true;
                         continue;
@@ -104,23 +134,36 @@ namespace Manimal.Icebreaker
                     foreach (var point in points)
                         foreach (var h in humans)
                         {
-                            float d = (h.Position - point).sqrMagnitude;
+                            var offset = h.Position - point;
+                            if (Mathf.Abs(offset.y) > g.MaxDeltaY) continue; // wrong deck
+                            float d = offset.sqrMagnitude;
                             if (d < nearest) nearest = d;
                         }
-                    if (nearest > radiusSqr) continue;
+                    if (nearest > g.Radius * g.Radius) continue;
 
                     // Same group-size table the authored box uses, resolved now rather
                     // than at build time so a late joiner is counted.
-                    int size = GroupSizeEventLogic.GroupSize();
-                    string id = null;
-                    foreach (var (min, max, name) in table)
-                        if (size >= min && size <= max) { id = name; break; }
-                    if (id == null) { g.Done = true; continue; }
+                    string id;
+                    int size = 0;
+                    if (table != null)
+                    {
+                        size = GroupSizeEventLogic.GroupSize();
+                        id = null;
+                        foreach (var (min, max, name) in table)
+                            if (size >= min && size <= max) { id = name; break; }
+                        if (id == null) { g.Done = true; continue; }
+                    }
+                    else
+                    {
+                        id = g.SingleId;
+                    }
 
                     g.Done = true;
                     Plugin.Log.LogWarning(
                         $"[WaveBackstop] {g.Label}: a player got within {Mathf.Sqrt(nearest):0}m of the spawn markers "
-                        + $"and the authored trigger never fired - raising '{id}' (group={size}) so the squad is in place");
+                        + $"and the authored trigger never fired - raising '{id}'"
+                        + (table != null ? $" (group={size})" : string.Empty)
+                        + " so the squad is in place");
                     Singleton<GlobalEventDispatcher>.Instance?.AnyEvent(id);
                 }
 
@@ -137,7 +180,9 @@ namespace Manimal.Icebreaker
             {
                 if (cache.TryGetValue(name, out var cached)) { all.AddRange(cached); continue; }
 
-                if (zones == null) zones = UnityEngine.Object.FindObjectsOfType<BotZone>();
+                // upstream 1.1.3 caches this; FindObjectsOfType<BotZone> is a full scene
+                // scan and this runs from a 0.5s loop.
+                if (zones == null) zones = IcebreakerCrew.AllBotZones();
                 var zone = zones.FirstOrDefault(z => z != null && z.name == name);
                 if (zone == null || zone.SpawnPoints == null) continue;
 
