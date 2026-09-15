@@ -264,6 +264,46 @@ T4가 터집니다. 밴드를 갑판 한 층으로 잡아 "가깝다"를 같은 
 
 ---
 
+## 봇이 선 채로 죽던 문제 (2026-09-15)
+
+> "꼭 한 마리가 이전 힐링·사격 행동하다가 죽어버리네 (래그돌이 되는 게 아니라)"
+
+그날 에러 로그 두 개에 **각각 한 번씩**, 같은 스택이 있습니다:
+
+```
+NullReferenceException
+  OfflinePlayerCulling.ApplyVisibleState ()      [0x00016]
+  BasePlayerCulling.SetMode (EMode mode)
+  BasePlayerCulling.Disable ()
+  BasePlayerCulling.DisableCullingOnDead ()
+  EFT.LocalPlayer.OnDead (EDamageType)
+  ... ActiveHealthController.Kill → TryToKillAfterDestroyPart → ApplyDamage
+```
+
+`OnDead` 는 죽는 순간 초반에 `DisableCullingOnDead()` 를 부릅니다. 여기서 예외가
+나면 **`OnDead` 의 나머지가 통째로 안 돌고**, 거기에 래그돌 전환이 들어 있습니다.
+그래서 몸이 애니메이터가 잡고 있던 자세 그대로 — 힐 중, 사격 중 — 굳습니다.
+라이드당 한 마리인 이유도 여기 있습니다. 죽는 바로 그 순간에 컬링 상태가 이미
+깨져 있어야 걸리는 조건이라서요.
+
+`OfflinePlayerCulling` 은 **아무 모드도 패치하지 않습니다** (그 라이드의 Harmony 로그
+전수 확인). BSG 코드 안쪽의 null이라 우리가 고쳐 넣을 필드가 없습니다. 대신 할 수
+있는 건 **그 예외가 `OnDead` 를 취소하지 못하게 막는 것**이고, 그래서
+`Patch_CullingDeathAirbag` 이 그 호출 지점에서 예외를 삼킵니다. `OnDead` 는 계속
+진행해서 래그돌까지 갑니다.
+
+삼키는 대가는 그 시체의 컬링 상태가 어정쩡하게 남는 것 — 최악이 멀리서 깜빡이는
+정도입니다. **선 채로 굳는 것보다는 깜빡이는 게 낫고**, 어느 쪽이든 로그에 한 줄씩
+남습니다:
+
+```
+[CullDeath] OfflinePlayerCulling.ApplyVisibleState threw (1 this session) —
+            swallowed so the rest of OnDead runs and the body still ragdolls.
+```
+
+메서드는 이름으로 찾습니다(`AccessTools.TypeByName`). BSG가 이름을 바꾸면 `Prepare`
+가 `false` 를 돌려주고 이 패치만 조용히 빠집니다 — `PatchAll` 이 통째로 죽지 않게.
+
 ## 1.1.3 동기화
 
 원작 `1.1.3` 태그를 머지했습니다. 상류는 콘텐츠 위주, 이 포크는 코드 수정 위주라

@@ -341,6 +341,83 @@ namespace Manimal.Icebreaker
         }
     }
 
+    // A BOT THAT DIES STANDING UP. Player report 2026-09-15: "one of them dies while
+    // still playing its previous healing/shooting animation instead of turning into a
+    // ragdoll." Both that raid's error logs carry the same stack, once each:
+    //
+    //   NullReferenceException
+    //     OfflinePlayerCulling.ApplyVisibleState ()      [0x00016]
+    //     BasePlayerCulling.SetMode (EMode mode)
+    //     BasePlayerCulling.Disable ()
+    //     BasePlayerCulling.DisableCullingOnDead ()
+    //     EFT.LocalPlayer.OnDead (EDamageType)
+    //     ...ActiveHealthController.Kill -> TryToKillAfterDestroyPart -> ApplyDamage
+    //
+    // OnDead calls DisableCullingOnDead early, and nothing between there and BSG's own
+    // catch handles the throw - so the exception escapes OnDead and EVERY remaining step
+    // of the death sequence is skipped, the ragdoll handover included. The body is left
+    // exactly as the animator had it: mid-heal, mid-shot. It is one bot per raid because
+    // it needs a body whose culling state is already broken at the instant it dies.
+    //
+    // Nothing here or in any installed mod patches OfflinePlayerCulling (checked against
+    // the raid's full Harmony log), so the null is inside BSG's own code and there is no
+    // field for us to heal. What we can do is stop it from cancelling the rest of OnDead:
+    // a finalizer swallows it AT the culling call, and OnDead carries on to the ragdoll.
+    //
+    // The cost of swallowing is that this corpse's culling may stay in whatever state it
+    // was in - at worst it pops in or out at distance. A corpse that pops beats a corpse
+    // frozen mid-animation, and the log names every occurrence either way.
+    //
+    // Resolved by name: ApplyVisibleState is not public, and the type is not one we want
+    // a hard compile-time reference to. If BSG renames either, Prepare returns false and
+    // the patch is skipped with a warning instead of taking PatchAll down.
+    [HarmonyPatch]
+    internal static class Patch_CullingDeathAirbag
+    {
+        private static System.Reflection.MethodBase _target;
+
+        private static System.Reflection.MethodBase Resolve()
+        {
+            if (_target != null) return _target;
+            var type = AccessTools.TypeByName("OfflinePlayerCulling");
+            if (type == null) return null;
+            _target = AccessTools.Method(type, "ApplyVisibleState");
+            return _target;
+        }
+
+        [HarmonyPrepare]
+        private static bool Prepare()
+        {
+            if (Resolve() != null) return true;
+            Plugin.Log.LogWarning(
+                "[CullDeath] OfflinePlayerCulling.ApplyVisibleState not found — the "
+                + "die-standing-up airbag is off this session (BSG renamed it?)");
+            return false;
+        }
+
+        [HarmonyTargetMethod]
+        private static System.Reflection.MethodBase Target() => Resolve();
+
+        private static int _swallowed;
+
+        [HarmonyFinalizer]
+        private static Exception Finalizer(Exception __exception)
+        {
+            if (__exception == null) return null;
+            if (!IceGate.On) return __exception; // off-map this patch is inert
+
+            _swallowed++;
+            // Every occurrence is worth a line: one of these is one bot that would
+            // otherwise have died standing up. They are rare (once per raid in both
+            // 09-15 logs), so there is no spam to rate-limit.
+            Plugin.Log.LogWarning(
+                $"[CullDeath] OfflinePlayerCulling.ApplyVisibleState threw ({_swallowed} this "
+                + $"session) — swallowed so the rest of OnDead runs and the body still "
+                + $"ragdolls. inner: {__exception.Message}");
+            return null;
+        }
+    }
+
     // 32k NREs/raid: ripped CullingObjects can lose their serialized _transform, and
     // Register() -> UpdateSphere() -> get_Position() NREs on every one at Start.
     // heal the field to the component's own transform before the game touches it —
