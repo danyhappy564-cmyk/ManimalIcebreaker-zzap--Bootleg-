@@ -237,6 +237,75 @@ dotnet build ManimalIcebreaker.sln
 
 ---
 
+## 1.1.3 동기화
+
+원작 `1.1.3` 태그를 머지했습니다. 상류는 콘텐츠 위주, 이 포크는 코드 수정 위주라
+겹치는 부분이 적었지만 **충돌이 없다고 안전한 게 아니므로** 수정 하나하나를 개별
+검증했습니다.
+
+### 상류가 가져온 것
+
+| 분류 | 내용 |
+|---|---|
+| 신규 퀘스트 | 피스키퍼 `PeacefulAtom`, `WiringTheVessel` (+ 배너 2장, 퀘스트 어사트) |
+| 번역 | 러시아어 전체(PR #12), 중국어 전체(PR #10) |
+| 데이터 | `looseLoot.json` 재작업, `BoreasQuests` 조정 |
+| 검증 | `verification/ClientAudioChecks.cs` 신규 |
+
+### 충돌 1건 — `IcebreakerCrew.cs`
+
+**상류가 우리와 같은 최적화를 독립적으로 했습니다.** `FindObjectsOfType<BotOwner>()`
+는 이 맵의 프롭 수에서 한 번에 70~80ms가 나오는데, 양쪽 다 이걸
+`GameWorld.AllAlivePlayersList` 순회로 바꿨습니다.
+
+비교해보니 **상류 쪽이 우리 것의 상위집합**이었습니다.
+
+| | 이 포크 | 상류 1.1.3 |
+|---|---|---|
+| `FindObjectsOfType<BotOwner>` 제거 | 4곳 (`AliveRogues` 외 3곳) | **13곳** (`LiveBots()`) |
+| `FindObjectsOfType<BotZone>` 제거 | 0곳 | **6곳** (`AllBotZones()` + 존 캐시) |
+
+그래서 **상류 구현을 통째로 받고**, 이 포크에만 있는 `IcebreakerWaveBackstop` 훅
+2줄만 다시 심었습니다. 우리 헬퍼 `AllBotOwners()` 는 삭제했고, 이를 부르던 곳이
+남아있지 않은 것을 전수 검색으로 확인했습니다.
+
+### 검증한 것
+
+- **충돌 마커 전수 검색** — 0건
+- **심볼 대조** — 이 포크 고유 파일이 참조하는 외부 심볼 4개
+  (`IcebreakerAIPlaces.Raised`, `IcebreakerLocation.Key`, `IcebreakerCrew.BdIb`,
+  `IcebreakerTripwires.OwnerId`) 가 머지 후에도 전부 정의돼 있음
+- **`IcebreakerCrew` 멤버 대조** — 트리 전체에서 호출하는 11개 멤버가 전부 정의돼 있음
+  (내가 상류 구현으로 교체하면서 끊어먹은 참조가 없는지 확인)
+- **하드코딩 키 대조** — 지난 1.1.0 때 이것 때문에 회귀가 났으므로 이번에도 확인.
+  `IcebreakerWaveBackstop` 이 쓰는 존 이름 `BotZoneEngineHide` / `BotZoneStern` /
+  `BotZoneSternTop` 이 `base.json` 에 실재하고, `IcebreakerGoonGuard` 가 지키는
+  `bossKnight` 가 `BossLocationSpawn` 에 있음. `ModLocationKey` / `ModLocationId` 도
+  상류에서 바뀌지 않음
+- **JSON 전수 파싱** — 53개 전부 정상
+- **중괄호 균형** — 수정된 6개 소스 전부 균형
+
+### 검증하지 못한 것
+
+**컴파일은 못 해봤습니다.** 이번 작업 환경에 .NET SDK가 없고, 설치처가 네트워크
+정책으로 막혀 있습니다. 위 검증은 정적 대조이며 빌드를 대신하지 못합니다.
+**빌드와 실제 레이드 확인은 직접 하셔야 합니다.**
+
+### 유지한 이 포크의 수정
+
+| 파일 | 상태 |
+|---|---|
+| `IcebreakerGoonGuard.cs` | 유지 (상류에 없음) |
+| `IcebreakerWaveBackstop.cs` | 유지 (상류에 없음) |
+| `IcebreakerCompatPatches.cs` | 유지 |
+| `IcebreakerSnowGusts` 가드 2개 | 유지 |
+| `RaidFixPatches` 오프아이스 디바운스 | 유지 |
+| `Directory.Build.props` 경로 오버라이드 | 유지 (상류 `ModVersion 1.1.3` 은 수용) |
+| `ragman` / `skier` 중국어 로케일 | 유지 (상류 번역 PR이 다루지 않은 상인) |
+| `AllBotOwners()` 헬퍼 | **삭제** — 상류 `LiveBots()` 가 더 넓게 처리 |
+
+---
+
 ## 알려진 문제
 
 **안티앨리어싱 / LOD 거리 흐려짐 (미해결)**

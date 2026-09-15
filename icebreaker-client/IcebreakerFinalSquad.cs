@@ -126,7 +126,7 @@ namespace Manimal.Icebreaker
                 .OrderByDescending(p => FikaBridge.NearestHumanSqr(p.Position)).ToArray();
             var humans = new List<Player>();
             FikaBridge.CollectHumans(humans);
-            var living = UnityEngine.Object.FindObjectsOfType<BotOwner>();
+            var living = IcebreakerCrew.LiveBots();
             int sightMask = LayerMask.GetMask("HighPolyCollider", "Terrain");
             var visible = new List<KeyValuePair<float, ISpawnPoint>>(); // fallback, by distance
             // The authored T4 zone has only TWO markers. Add nearby positions on

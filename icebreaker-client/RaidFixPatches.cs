@@ -1092,8 +1092,8 @@ namespace Manimal.Icebreaker
             // statue bots fail with zero log output — this makes them talk.
             if (Input.GetKeyDown(KeyCode.F1))
             {
-                var bots = UnityEngine.Object.FindObjectsOfType<BotOwner>();
-                Plugin.Log.LogDebug($"[BotAutopsy] {bots.Length} BotOwner(s) alive:");
+                var bots = IcebreakerCrew.LiveBots();
+                Plugin.Log.LogDebug($"[BotAutopsy] {bots.Count} BotOwner(s) alive:");
                 foreach (var b in bots)
                 {
                     try
@@ -1457,6 +1457,9 @@ namespace Manimal.Icebreaker
             // two: the sound scene is live by now and the sooner the loops start the less
             // of the raid opens in silence
             IcebreakerAmbientAudio.TryRestore(); yield return null;
+            IcebreakerDoorBlizzardAudio.Restore(); yield return null;
+            // Wiring the Vessel breaker panels: retail trigger graph rebuilt on the ripped switches
+            IcebreakerPanelRepair.Restore(); yield return null;
             FreeHovercraftLights(); yield return null;
             DiscoverLamps(); yield return null;
             ApplyLamps(); yield return null;

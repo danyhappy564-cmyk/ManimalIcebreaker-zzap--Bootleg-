@@ -29,7 +29,29 @@ namespace Manimal.Icebreaker.Blowtorch
     // by hand with the CreateItemUsablePrefab factory.
     internal static class BlowtorchEquip
     {
-        internal static void Equip(Player player, Item item)
+        private static bool _loading;
+
+        // UsePrefab isnt loaded when the key is pressed on 4.1, and a "not loaded" throw after
+        // the old controller is gone strands the player handless — load first, swap after.
+        internal static async void Equip(Player player, Item item)
+        {
+            if (_loading) return;
+            _loading = true;
+            try
+            {
+                await EFT.InventoryLogic.Operations.ChangeItemsOperation.LoadBundles(item);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning($"[Blowtorch] hands bundle load failed, staying in current hands: {e.Message}");
+                return;
+            }
+            finally { _loading = false; }
+            if (player == null || item == null || player.HandsController?.Item == item) return;
+            Swap(player, item);
+        }
+
+        private static void Swap(Player player, Item item)
         {
             try
             {
@@ -66,6 +88,9 @@ namespace Manimal.Icebreaker.Blowtorch
             catch (Exception e)
             {
                 Plugin.Log.LogWarning($"[Blowtorch] spawn failed: {e}");
+                // the previous controller is already gone — never leave the player handless
+                try { player.SetEmptyHands(null); }
+                catch (Exception e2) { Plugin.Log.LogWarning($"[Blowtorch] empty-hands recovery failed: {e2.Message}"); }
             }
         }
     }
@@ -152,11 +177,15 @@ namespace Manimal.Icebreaker.Blowtorch
         }
     }
 
-    // vanilla whitelists only certain classes for quickslot binding / drawing
+    // vanilla whitelists only certain classes for quickslot binding / drawing.
+    // run LAST: WTT-PackNStrap's postfixes on both checks recompute the result from
+    // scratch (their own class whitelist), which clobbered the torch's true and left it
+    // unbindable. SPT's ModulePatch names each owner after its class, hence the ids.
     [HarmonyPatch(typeof(InventoryController), nameof(InventoryController.IsAtBindablePlace))]
     internal static class Patch_TorchBindable
     {
-        [HarmonyPostfix]
+        [HarmonyPostfix, HarmonyPriority(Priority.Last)]
+        [HarmonyAfter("IsAtBindablePlacePatch", "BindableTacticalPatch", "MedpouchBindablePatch")]
         private static void Postfix(Item item, ref bool __result)
         {
             if (BlowtorchIds.IsTorch(item)) __result = true;
@@ -166,7 +195,8 @@ namespace Manimal.Icebreaker.Blowtorch
     [HarmonyPatch(typeof(InventoryController), nameof(InventoryController.IsAtReachablePlace))]
     internal static class Patch_TorchReachable
     {
-        [HarmonyPostfix]
+        [HarmonyPostfix, HarmonyPriority(Priority.Last)]
+        [HarmonyAfter("IsAtReachablePlacePatch", "ReachableTacticalPatch", "PhantomReachabilityPatch")]
         private static void Postfix(Item item, ref bool __result)
         {
             if (BlowtorchIds.IsTorch(item)) __result = true;

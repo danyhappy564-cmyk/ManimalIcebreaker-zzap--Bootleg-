@@ -1,5 +1,9 @@
 # Icebreaker_Sound retail parity audit (2026-07-30)
 
+September 13 follow-up: all 12 door-blizzard emitters are restored at runtime
+(`IcebreakerDoorBlizzardAudio`). They are looping wind sounds, not one-shots.
+The table below records the older audit and is superseded for that gap.
+
 Full diff of retail 1.0's Icebreaker_Sound scene (level707) against our stack:
 the SDK scene + the runtime restores (IcebreakerAcoustics spatial layer,
 IcebreakerAmbientAudio ambient layer). Method: full typetree inventory of every

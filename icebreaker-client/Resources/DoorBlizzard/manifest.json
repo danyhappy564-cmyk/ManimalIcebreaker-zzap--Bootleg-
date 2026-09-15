@@ -1,0 +1,273 @@
+{
+  "formatVersion": 1,
+  "clip": "amb_icebraker_indoor_wind",
+  "channels": 2,
+  "frequency": 44100,
+  "pcmSha256": "610fd9f2fdd15e32d0e6a508fcba31392c229b17dc4ee5040a0b7ee4f40e550d",
+  "doors": [
+    {
+      "kind": "hatch",
+      "doorPath": "INTERACTIVE_Icebreaker_exterior_hatchway_door_frozen",
+      "doorPosition": [
+        -1.5249998569488525,
+        43.33100128173828,
+        35.68600082397461
+      ],
+      "position": [
+        -1.5535430908203125,
+        42.883609771728516,
+        35.637237548828125
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.5,
+      "fadeOut": 1.0,
+      "rollOff": 5,
+      "playTrigger": "Open_03_722179887",
+      "stopTrigger": ""
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        -12.655796895237534,
+        19.466269680641858,
+        37.28735348048364
+      ],
+      "position": [
+        -12.556743621826172,
+        19.571609258651733,
+        36.685997009277344
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_1335698609",
+      "stopTrigger": "Close_01_1335698609"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        12.65979400989481,
+        19.465270092039333,
+        36.13163668291032
+      ],
+      "position": [
+        12.485000610351562,
+        19.571609258651733,
+        36.685997009277344
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_1153787085",
+      "stopTrigger": "Close_01_1153787085"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        5.898640554738997,
+        32.957270668078586,
+        18.923203178434
+      ],
+      "position": [
+        6.4594573974609375,
+        33.14560890197754,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_2559274650",
+      "stopTrigger": "Close_01_2559274650"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        10.001990122933716,
+        27.565902761772907,
+        18.928735962816614
+      ],
+      "position": [
+        10.581459045410156,
+        27.703609466552734,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_4089610050",
+      "stopTrigger": "Close_01_4089610050"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        -11.111897663931519,
+        27.565902761772907,
+        18.92504333586349
+      ],
+      "position": [
+        -10.575542449951172,
+        27.703609466552734,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_3647282393",
+      "stopTrigger": "Close_01_3647282393"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        9.995640559335083,
+        24.86590009148482,
+        18.92504524321212
+      ],
+      "position": [
+        10.581459045410156,
+        24.86590003967285,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_1346419067",
+      "stopTrigger": "Close_01_1346419067"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        -11.111897663931519,
+        30.26590352471236,
+        18.92504333586349
+      ],
+      "position": [
+        -10.575542449951172,
+        30.381608963012695,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_1278634920",
+      "stopTrigger": "Close_01_1278634920"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        7.261275232670095,
+        19.533417743395873,
+        -59.10273003310654
+      ],
+      "position": [
+        7.086479187011719,
+        19.631609201431274,
+        -58.54836654663086
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_1018218795",
+      "stopTrigger": "Close_01_1018218795"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        -7.007359582590104,
+        35.66366867833249,
+        22.268204399137126
+      ],
+      "position": [
+        -6.477542877197266,
+        36.01861000061035,
+        22.336238861083984
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_2174010685",
+      "stopTrigger": "Close_01_2174010685"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        5.897640627218245,
+        35.66026978306882,
+        22.288202949552165
+      ],
+      "position": [
+        6.432456970214844,
+        36.01861000061035,
+        22.336238861083984
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01",
+      "stopTrigger": "Close_01"
+    },
+    {
+      "kind": "door",
+      "doorPath": "SBG_Icebreaker_Design_Stuff/SOO_LOD0/DOOR/Exterior_door_02_Snow_Effect_Decals_01/Exterior_door_02_door",
+      "doorPosition": [
+        10.001991076608032,
+        30.265899710015095,
+        18.928737870165246
+      ],
+      "position": [
+        10.538459777832031,
+        30.381608963012695,
+        18.925045013427734
+      ],
+      "clip": "amb_icebraker_indoor_wind",
+      "mixer": "AmbCommonEffects",
+      "volume": 0.75,
+      "fadeIn": 2.0,
+      "fadeOut": 1.0,
+      "rollOff": 10,
+      "playTrigger": "Open_01_4168114648",
+      "stopTrigger": "Close_01_4168114648"
+    }
+  ]
+}

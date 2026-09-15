@@ -193,3 +193,53 @@ construction/target resolution of the SPT wrapper. The client-only test hotfix
 must be retested on headless; it fixes a demonstrated regression but does not
 prove that the later task-completion error or the separate player-hosted hang
 is resolved. No Fika addon code was changed.
+
+### Peacekeeper Icebreaker quests (September 14)
+
+Peaceful Atom and Wiring the Vessel are ported from the retail 1.1.5 quest list
+under `db/CustomQuests/peacekeeper`, with new mod ids like the other retail ports.
+Peaceful Atom follows Oil Change and hands in the nuclear power unit control log
+(a WTT-ContentBackport quest item). The log was a 75% entry in the sampled loot
+pool, which SPT's spawn budget can skip; it is now the forced spawn
+`iceforced_npu_log` at probability 1, placed at one of the three retail group
+positions per raid by the loose-loot randomiser.
+Wiring the Vessel follows Peaceful Atom, mails the LAN hacking device on accept,
+and unlocks the retail SICC barter at Peacekeeper LL1 on completion.
+
+Retail drives the three breaker repairs through `LocationTrigger` conditions and a
+trigger graph on each broken CPU panel (`Icebreaker_CPU_panel_top_04_broken/Logic`):
+Switch, toolkit requirement, a 6.4-second multitool plant, the `Repair` animator
+bool, the four red flicker lights, two `electric_shield_repair_*` clips and a
+quest-condition handler. `LocationTrigger` does not exist in the SPT client and the
+rip kept only the Switch, Animator and lights, so the port expresses the three
+steps as `VisitPlace` conditions and `IcebreakerPanelRepair` rebuilds the retail
+sequence on the three switches at raid start: the "Use" prompt shows only while the
+quest is Started, needs a toolkit (not consumed), runs the native multitool plant
+with the retail objective text, plays the retail clips (embedded PCM under
+`Resources/PanelRepair`), flips the animator and lights, and completes the step
+through the `TriggerVisited` counter the condition reads. Panel-to-objective
+pairing is read from each room's `HandlerCompleteQuestCondition` in retail
+level704 (Room_01 = on the way to the engine room, Room_02 = under it, Room_03 =
+near storage). Only the `install_device` zone remains in
+`db/CustomQuestZones/WiringTheVesselZones.json`; it covers the retail
+PlaceItemTrigger run on the CPU console for the `LeaveItemAtLocation` step.
+
+Raid checks still required: the three panels prompt "Use" with the quest active,
+refuse without a toolkit, animate and sound through the repair, and tick their
+objective; a repaired panel stays lit on re-entry; the device plants on the CPU
+console; Chinese locale strings for both quests display (peacekeeper `ch.json` is
+new). Fika peers do not yet see another player's repair.
+
+### Knight spawn and the goon rotation (September 14)
+
+The knight is the `bossKnight` row at `BotZoneMash_t1`, fired by the retail `T1`
+bot-event trigger boxes on the forward deck. SPT's `GoonLocationSpawnService`
+zeroes every `bossKnight` row on every map at post-DB-load and again each
+`rotationIntervalHours` (3 h) from the server update loop, then re-enables one map
+from its own pool. The mod restored the Icebreaker row at loot generation, but
+`StartLocalRaid` clones the location before loot generates, so that restore only
+ever fixed the database for the following raid: the first Icebreaker raid after a
+server start, and any raid after a rotation, was served a zero-chance knight.
+`IcebreakerLootFirewall.GoonRotationPatch` now restores the row immediately after
+each `AdjustGoonMapSpawns`, and the server log carries an Information line at
+raid start with the chance the client's clone received.

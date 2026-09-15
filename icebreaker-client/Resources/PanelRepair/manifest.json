@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "source": "retail 1.1.5.47242 sharedassets704 (level704 Panel_repair_sound/Repair HandlerPlaySoundAdvanced)",
+  "channels": 2,
+  "frequency": 44100,
+  "clips": {
+    "loop": {
+      "clip": "electric_shield_repair_loop",
+      "file": "repair_loop.pcm",
+      "frames": 286650,
+      "pcmSha256": "337c32717b3b8ec6c8685fb07c083c5dca632a840dbeaa2b5810ea2095e211bb",
+      "bytes": 1146600
+    },
+    "done": {
+      "clip": "electric_shield_repair_done",
+      "file": "repair_done.pcm",
+      "frames": 53345,
+      "pcmSha256": "7bd7269ff6e16558ca3e6ea330a60582ad9e9a41fbb9937f072fb443b1fcbb64",
+      "bytes": 213380
+    }
+  },
+  "playback": {
+    "volume": 0.9,
+    "rollOff": 15,
+    "group": "InteractiveObjects",
+    "occlusion": "ContinuousPropagated",
+    "mixer": "TechnicalSounds"
+  }
+}

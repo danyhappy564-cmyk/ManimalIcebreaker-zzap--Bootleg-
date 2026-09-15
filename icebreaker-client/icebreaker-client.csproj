@@ -18,6 +18,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="ZLinq">
+      <HintPath>$(SPTPath)\BepInEx\plugins\UnityToolkit\ZLinq.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="spt-reflection">
       <HintPath>$(SPTPath)\BepInEx\plugins\spt\spt-reflection.dll</HintPath>
       <Private>false</Private>
@@ -120,6 +124,11 @@
     <!-- Embedded so DLL-only updates and full releases carry the same splash art. -->
     <EmbeddedResource Include="..\Texture2D\splash_17.png" LogicalName="Manimal.Icebreaker.Splash.splash_17.png" />
     <EmbeddedResource Include="..\Texture2D\splash_18.png" LogicalName="Manimal.Icebreaker.Splash.splash_18.png" />
+    <EmbeddedResource Include="Resources\DoorBlizzard\manifest.json" LogicalName="Manimal.Icebreaker.DoorBlizzard.manifest.json" />
+    <EmbeddedResource Include="Resources\DoorBlizzard\blizzard.pcm" LogicalName="Manimal.Icebreaker.DoorBlizzard.blizzard.pcm" />
+    <EmbeddedResource Include="Resources\PanelRepair\manifest.json" LogicalName="Manimal.Icebreaker.PanelRepair.manifest.json" />
+    <EmbeddedResource Include="Resources\PanelRepair\repair_loop.pcm" LogicalName="Manimal.Icebreaker.PanelRepair.repair_loop.pcm" />
+    <EmbeddedResource Include="Resources\PanelRepair\repair_done.pcm" LogicalName="Manimal.Icebreaker.PanelRepair.repair_done.pcm" />
   </ItemGroup>
 
   <!-- BuildInfo is generated centrally by Directory.Build.targets. -->

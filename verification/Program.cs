@@ -69,7 +69,11 @@ catch (InvalidOperationException) { Console.WriteLine("PASS Missing loot target 
 new Harmony("com.manimal.icebreaker.lootfirewall").UnpatchSelf();
 
 using var game = AssemblyDefinition.ReadAssembly(Path.Combine(args[0], "EscapeFromTarkov_Data", "Managed", "Assembly-CSharp.dll"));
-using var client = AssemblyDefinition.ReadAssembly(args[1]);
+using var clientResolver = new DefaultAssemblyResolver();
+clientResolver.AddSearchDirectory(Path.Combine(args[0], "BepInEx", "core"));
+clientResolver.AddSearchDirectory(Path.Combine(args[0], "EscapeFromTarkov_Data", "Managed"));
+using var client = AssemblyDefinition.ReadAssembly(args[1], new ReaderParameters { AssemblyResolver = clientResolver });
+ClientAudioChecks.Run(client);
 var identityProps = System.Xml.Linq.XDocument.Load("Directory.Build.props").Root!.Element("PropertyGroup")!;
 Check(metadata.Version.ToString() == identityProps.Element("ModVersion")!.Value &&
       metadata.ModGuid == identityProps.Element("ModGuid")!.Value &&

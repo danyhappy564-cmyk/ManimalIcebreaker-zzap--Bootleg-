@@ -33,7 +33,7 @@ internal static class LocationChecks
             Check(!text.Contains("5714dc342459777137212e0b"), "quest data has no Suburbs reference: " + Path.GetFileName(file));
             if (text.Contains(id)) quests++;
         }
-        Check(quests == 4, "all four retained Icebreaker quest location references migrated");
+        Check(quests == 6, "all six Icebreaker quest files reference the standalone location");
 
         var table = Activator.CreateInstance<LocationTable>();
         int ordinal = 1;

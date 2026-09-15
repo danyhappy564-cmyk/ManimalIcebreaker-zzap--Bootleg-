@@ -42,6 +42,7 @@ namespace Manimal.Icebreaker.Blowtorch
         // start tail on ignition, loop while firing, fade on release
         private AudioSource _audio;
         private AudioClip _sndStart, _sndLoop, _sndFade;
+        private BlowtorchFlame _flame;
 
         public override Dictionary<Type, Player.ItemHandsController.OperationFactoryDelegate> GetOperationFactoryDelegates()
         {
@@ -105,6 +106,7 @@ namespace Manimal.Icebreaker.Blowtorch
                 Plugin.Log.LogWarning("[Blowtorch] FirearmsAnimator NULL — vanilla left-hand path cannot run");
 
             BindAudio(weaponPrefab);
+            _flame = BlowtorchFlame.Attach(weaponPrefab.transform);
 
             // THE third-person pose fix: vanilla usable graphs fire a ThirdAction(1)
             // animation event that lands in the BODY animator's FirstAction int — the
@@ -272,11 +274,13 @@ namespace Manimal.Icebreaker.Blowtorch
                 // loop reads as input lag) — the flame follows the trigger NOW
                 TorchAnimator.CrossFade(want ? "torch_start" : "torch_end", 0.05f, Layer);
                 SetBurnerAudio(want);
+                _flame?.Set(want);
                 // fika hook: this controller only exists for the LOCAL player (observed
                 // torches run the stock UsableItemController), so no echo risk
                 try { LocalTorchFiring?.Invoke(want); }
                 catch (Exception e) { Plugin.Log.LogWarning($"[Torch] fire hook failed: {e.Message}"); }
             }
+            _flame?.Tick();
         }
 
         // ---- fika sync hooks ----
@@ -299,6 +303,7 @@ namespace Manimal.Icebreaker.Blowtorch
         {
             if (_firing) SetBurnerAudio(false);
             _firing = false;
+            _flame?.Set(false);
             if (TorchAnimator != null) TorchAnimator.SetBool(FiringHash, false);
         }
 

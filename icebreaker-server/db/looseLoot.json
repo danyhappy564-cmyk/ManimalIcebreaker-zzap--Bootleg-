@@ -1878,6 +1878,82 @@
      }
     ]
    }
+  },
+  {
+   "locationId": "(8.011, 11.286, -17.999)",
+   "probability": 1.0,
+   "template": {
+    "Id": "iceforced_npu_log",
+    "IsContainer": false,
+    "useGravity": false,
+    "randomRotation": false,
+    "Position": {
+     "x": 8.011,
+     "y": 11.286,
+     "z": -17.999
+    },
+    "Rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "IsGroupPosition": true,
+    "GroupPositions": [
+     {
+      "Name": "groupPoint[0]",
+      "Weight": 1,
+      "Position": {
+       "x": 8.011,
+       "y": 11.286,
+       "z": -17.999
+      },
+      "Rotation": {
+       "x": 0,
+       "y": 0,
+       "z": 0
+      }
+     },
+     {
+      "Name": "groupPoint[1]",
+      "Weight": 1,
+      "Position": {
+       "x": 5.033,
+       "y": 8.785,
+       "z": -16.819
+      },
+      "Rotation": {
+       "x": 0,
+       "y": 270.664,
+       "z": 0
+      }
+     },
+     {
+      "Name": "groupPoint[2]",
+      "Weight": 1,
+      "Position": {
+       "x": 3.629,
+       "y": 16.743,
+       "z": 27.229
+      },
+      "Rotation": {
+       "x": 0,
+       "y": 268.941,
+       "z": 0
+      }
+     }
+    ],
+    "IsAlwaysSpawn": true,
+    "Root": "a39d1584b71f3f4f1b04cef8",
+    "Items": [
+     {
+      "_id": "a39d1584b71f3f4f1b04cef8",
+      "_tpl": "69bb42b9ce2b96840302b92b",
+      "upd": {
+       "StackObjectsCount": 1
+      }
+     }
+    ]
+   }
   }
  ],
  "spawnpoints": [
@@ -85725,91 +85801,6 @@
     {
      "composedKey": {
       "key": "296367833"
-     },
-     "relativeProbability": 1
-    }
-   ]
-  },
-  {
-   "locationId": "(8.011, 11.286, -17.999)",
-   "probability": 0.75,
-   "template": {
-    "Id": "icelive_113",
-    "IsContainer": false,
-    "useGravity": false,
-    "randomRotation": false,
-    "Position": {
-     "x": 8.011,
-     "y": 11.286,
-     "z": -17.999
-    },
-    "Rotation": {
-     "x": 0,
-     "y": 0,
-     "z": 0
-    },
-    "IsGroupPosition": true,
-    "GroupPositions": [
-     {
-      "Name": "groupPoint[0]",
-      "Weight": 1,
-      "Position": {
-       "x": 8.011,
-       "y": 11.286,
-       "z": -17.999
-      },
-      "Rotation": {
-       "x": 0,
-       "y": 0,
-       "z": 0
-      }
-     },
-     {
-      "Name": "groupPoint[1]",
-      "Weight": 1,
-      "Position": {
-       "x": 5.033,
-       "y": 8.785,
-       "z": -16.819
-      },
-      "Rotation": {
-       "x": 0,
-       "y": 270.664,
-       "z": 0
-      }
-     },
-     {
-      "Name": "groupPoint[2]",
-      "Weight": 1,
-      "Position": {
-       "x": 3.629,
-       "y": 16.743,
-       "z": 27.229
-      },
-      "Rotation": {
-       "x": 0,
-       "y": 268.941,
-       "z": 0
-      }
-     }
-    ],
-    "IsAlwaysSpawn": false,
-    "Root": "a39d1584b71f3f4f1b04cef8",
-    "Items": [
-     {
-      "composedKey": "1557071742",
-      "_id": "a39d1584b71f3f4f1b04cef8",
-      "_tpl": "69bb42b9ce2b96840302b92b",
-      "upd": {
-       "StackObjectsCount": 1
-      }
-     }
-    ]
-   },
-   "itemDistribution": [
-    {
-     "composedKey": {
-      "key": "1557071742"
      },
      "relativeProbability": 1
     }

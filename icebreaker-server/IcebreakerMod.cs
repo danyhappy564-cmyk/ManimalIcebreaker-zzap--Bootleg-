@@ -45,7 +45,10 @@ public record ModMetadata : IModMetadata
         { "com.wtt.contentbackport", new SemanticVersioning.Range("~2.0.1") },
         { "com.morebotsapi.tacticaltoaster", new SemanticVersioning.Range("~2.1.1") },
         { "com.blackdiv.tacticaltoaster", new SemanticVersioning.Range("~1.3.1") },
-        { "com.manimal.csgas", new SemanticVersioning.Range("~2.0.0") }
+        { "com.manimal.csgas", new SemanticVersioning.Range("~2.0.0") },
+        // Boreas Part 6 counts kills in the retail q14_10_kill_ice zone, which only
+        // exists on the backported Interchange map
+        { "com.manimal.interchange", new SemanticVersioning.Range("~1.0.0") }
     };
     public string? Url { get; init; } = BuildInfo.SourceUrl;
     public bool HasPrepatcher { get; init; } = false;
@@ -92,6 +95,88 @@ public class IcebreakerMod(
         ("wedge_banner Name", "\"The Wedge’s\" Special Squadron"),
         ("wedge_banner Description",
             "Reconnaissance and monitoring reports from the few PMC networks still active in Tarkov have indicated that several combat helicopters are moving toward the Gulf of Finland. Intercepted radio frequencies mention a codename: \"The Wedge\". Accompanied by a squad of operatives from some of the world’s most diverse special forces, such as the SAS and Mossad, Wedge is a senior Black Division operative in charge of a covert operation aboard the ship \"Boreas\". No one has come out alive to reveal their motives there."),
+    };
+
+    // player-facing text of the client plugin (interaction menu, hold-progress panel,
+    // notifications). the client resolves these keys through Localized() and falls
+    // back to its own english copy when a key is missing, so an older server stays
+    // compatible. english goes into every language, same as the captions above.
+    private static readonly (string Key, string Text)[] UiLocales =
+    {
+        ("Icebreaker_UI_ChainDoor_Open", "Open"),
+        ("Icebreaker_UI_ChainDoor_Plant", "Plant"),
+        ("Icebreaker_UI_ChainDoor_Planting", "Planting charge"),
+        ("Icebreaker_UI_SealedDoor_Unseal", "Unseal Door"),
+        ("Icebreaker_UI_SealedDoor_Reseal", "Reseal Door"),
+        ("Icebreaker_UI_SealedDoor_Unsealing", "Unsealing Door"),
+        ("Icebreaker_UI_SealedDoor_Sealing", "Sealing Door"),
+        ("Icebreaker_UI_Keypad_EnterCode", "Enter code"),
+        ("Icebreaker_UI_Keypad_Unlocked", "Door unlocked"),
+        ("Icebreaker_UI_Hatch_Melt", "Melt the ice (blowtorch)"),
+        ("Icebreaker_UI_Hatch_TurnHandle", "Turn handle"),
+        ("Icebreaker_UI_Hatch_Open", "Open hatch"),
+        ("Icebreaker_UI_Heli_Signal", "Signal the helicopter with a green flare to extract"),
+        ("Icebreaker_UI_Heli_Inbound", "The helicopter has been signaled — inbound, hold the pad"),
+        ("Icebreaker_UI_Heli_Landed", "The helicopter has landed — extraction active"),
+        ("Icebreaker_UI_Fare_NotEnough", "The smugglers want {0:N0} roubles for the crossing ({1:N0} carried)"),
+    };
+
+    // per-language overrides, applied on top of the english above. a language with
+    // no table here keeps english. keys must match the ones written in OnLoad.
+    private const string IcebreakerBlurbRu =
+        "В Финском заливе, в кольце блокады вокруг Таркова, застрял атомный ледокол «Борей», принадлежащий логистической корпорации Paradigm Shipping. Истинное назначение «Борея» и его груз до сих пор неизвестны."
+        + "\n\n"
+        + "Похоже, Paradigm Shipping и TerraGroup приложили немало усилий, чтобы ледокол не мелькал в прессе, а его маршруты и задачи оставались засекреченными.";
+
+    private static readonly Dictionary<string, (string Key, string Text)[]> TranslatedLocales = new()
+    {
+        ["ru"] = new[]
+        {
+            (IcebreakerLocation.Id + " Name", "Ледокол"),
+            (IcebreakerLocation.Key, "Ледокол"),
+            (IcebreakerLocation.Id + " Description", IcebreakerBlurbRu),
+            ("Icebreaker_Exit_Heli", "Вертолёт"),
+
+            ("icebreaker_cover Name", "Ледокол"),
+            ("icebreaker_cover Description", IcebreakerBlurbRu),
+            ("blackdiv_banner Description",
+                "Время от времени по Таркову ползут слухи о спецподразделении, которое не относится ни к USEC, ни к BEAR. Если верить байкам у костра, эти оперативники по ночам зачищают закрытые объекты и вывозят ценные данные TerraGroup. Но среди бойцов ЧВК мало кто верит в существование этого «Black Division»: в нынешних условиях свободно заводить и выводить через кольцо блокады целые боевые группы практически невозможно."),
+            ("wedge_banner Name", "Особый отряд «Wedge»"),
+            ("wedge_banner Description",
+                "Разведсводки немногих ещё действующих в Таркове сетей ЧВК сообщают, что несколько боевых вертолётов движутся в сторону Финского залива. В перехваченных радиопереговорах звучит позывной «Wedge». Во главе отряда оперативников из самых разных спецподразделений мира, включая SAS и «Моссад», Wedge — старший оперативник Black Division — руководит тайной операцией на борту «Борея». Никто из побывавших там не вернулся живым, чтобы рассказать, что им там нужно."),
+
+            ("Icebreaker_UI_ChainDoor_Open", "Открыть"),
+            ("Icebreaker_UI_ChainDoor_Plant", "Заложить заряд"),
+            ("Icebreaker_UI_ChainDoor_Planting", "Закладка заряда"),
+            ("Icebreaker_UI_SealedDoor_Unseal", "Отдраить дверь"),
+            ("Icebreaker_UI_SealedDoor_Reseal", "Задраить дверь"),
+            ("Icebreaker_UI_SealedDoor_Unsealing", "Отдраивание двери"),
+            ("Icebreaker_UI_SealedDoor_Sealing", "Задраивание двери"),
+            ("Icebreaker_UI_Keypad_EnterCode", "Ввести код"),
+            ("Icebreaker_UI_Keypad_Unlocked", "Дверь открыта"),
+            ("Icebreaker_UI_Hatch_Melt", "Растопить лёд горелкой"),
+            ("Icebreaker_UI_Hatch_TurnHandle", "Повернуть ручку"),
+            ("Icebreaker_UI_Hatch_Open", "Открыть люк"),
+            ("Icebreaker_UI_Heli_Signal", "Запустите зелёную ракету, чтобы вызвать вертолёт"),
+            ("Icebreaker_UI_Heli_Inbound", "Сигнал принят — вертолёт летит, удерживайте площадку"),
+            ("Icebreaker_UI_Heli_Landed", "Вертолёт приземлился — эвакуация доступна"),
+            ("Icebreaker_UI_Fare_NotEnough", "Контрабандисты просят {0:N0} руб. за переправу (у вас {1:N0})"),
+        },
+        // from the Chinese translation PR (#10); its file-side copies of these keys
+        // were overwritten by the transformer above, so they live here instead
+        ["ch"] = new[]
+        {
+            (IcebreakerLocation.Id + " Name", "破冰船"),
+            (IcebreakerLocation.Key, "破冰船"),
+            (IcebreakerLocation.Id + " Description", "在芬兰湾里，隶属于物流公司 Paradigm Shipping 的核动力破冰船“北风之神”号深陷诺文斯克的封锁当中。“北风之神”号的确切用途及其运载的货物仍然未知。Paradigm Shipping 和 TerraGroup 做了特别努力，尽量让媒体对这艘破冰船避而不谈，并对其航线和任务严格保密。"),
+            ("Icebreaker_Exit_Heli", "直升机"),
+            ("icebreaker_cover Name", "破冰船"),
+            ("icebreaker_cover Description", "在芬兰湾里，隶属于物流公司 Paradigm Shipping 的核动力破冰船“北风之神”号深陷诺文斯克的封锁当中。“北风之神”号的确切用途及其运载的货物仍然未知。Paradigm Shipping 和 TerraGroup 做了特别努力，尽量让媒体对这艘破冰船避而不谈，并对其航线和任务严格保密。"),
+            ("blackdiv_banner Name", "黑色军团"),
+            ("blackdiv_banner Description", "时不时地，塔科夫就会流传关于一个既不属于 USEC 也不属于 BEAR 的秘密部队的传言。坊间传闻，这些特殊行动人员会在夜间行动，肃清相关区域，回收宝贵的 TerraGroup 数据。但在 PMC 行动人员中，几乎没有人相信这个所谓的“Black Division”真的存在，因为在当前形势下，让成建制的整支作战小组自由出入封锁区根本不可能。\n……吗？"),
+            ("wedge_banner Name", "“Wedge”特别行动队"),
+            ("wedge_banner Description", "来自少数仍在塔科夫活动的PMC的情报和特殊渠道的监控记录显示，有多架武装直升机正在向芬兰湾移动。我们截获的无线电片段提到了一个代号——“Wedge”。其成员来自世界各地——比如 前SAS 和前摩萨德。Wedge同时也是其指挥官的呼号，他是 Black Division 的精英行动人员，负责在“北风之神”号上的秘密行动，以及对一切可能的无关知情人员的“清理”工作。"),
+        },
     };
 
     public async Task OnLoadAsync(CancellationToken cancellationToken)
@@ -247,6 +332,7 @@ public class IcebreakerMod(
         {
             foreach (var kv in localeTable.Global)
             {
+                TranslatedLocales.TryGetValue(kv.Key, out var translated);
                 kv.Value.AddTransformer(locale =>
                 {
                     locale[IcebreakerLocation.Id + " Name"] = "Icebreaker";
@@ -266,6 +352,10 @@ public class IcebreakerMod(
                     // loading screen banner captions. keyed "<bannerId> Name" /
                     // "<bannerId> Description", matching the ids in base.json's Banners.
                     foreach (var (key, text) in BannerLocales) locale[key] = text;
+                    // client plugin UI text, then any translation for this language
+                    foreach (var (key, text) in UiLocales) locale[key] = text;
+                    if (translated is not null)
+                        foreach (var (key, text) in translated) locale[key] = text;
                     return locale;
                 });
             }

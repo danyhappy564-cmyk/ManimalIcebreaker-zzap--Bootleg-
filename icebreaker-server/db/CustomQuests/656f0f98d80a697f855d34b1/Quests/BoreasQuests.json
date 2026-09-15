@@ -4,7 +4,7 @@
     "_id": "29c44a1b8bed96c51db5bf78",
     "traderId": "656f0f98d80a697f855d34b1",
     "type": "Elimination",
-    "location": "5704e554d2720bac5b8b456e",
+    "location": "any",
     "image": "/files/quest/icon/Boreas_Banner",
     "acceptanceAndFinishingSource": "eft",
     "arenaLocations": [],
@@ -40,7 +40,8 @@
                 "dynamicLocale": false,
                 "id": "81e4fdfe0a4486aab77835fa",
                 "zoneIds": [
-                  "boreas_camp_resort"
+                  "boreas_camp_resort",
+                  "q14_10_kill_ice"
                 ]
               },
               {
@@ -74,7 +75,8 @@
                 "dynamicLocale": false,
                 "id": "b1182a4ada7d3c80132f4df7",
                 "target": [
-                  "Shoreline"
+                  "Shoreline",
+                  "Interchange"
                 ]
               }
             ],

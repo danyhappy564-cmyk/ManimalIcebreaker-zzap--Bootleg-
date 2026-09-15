@@ -66,6 +66,7 @@ public class IcebreakerLootFirewall(
         cancellationToken.ThrowIfCancellationRequested();
         _instance = this;
         new LootGenerationPatch().Enable();
+        new GoonRotationPatch().Enable();
         return Task.CompletedTask;
     }
 
@@ -77,6 +78,19 @@ public class IcebreakerLootFirewall(
         [PatchTranspiler]
         private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             => WrapLootGeneration(instructions);
+    }
+
+    // the goon rotation runs at post-db-load and again every RotationIntervalHours from the
+    // server's update loop, and a local raid CLONES the location before loot generates, so
+    // a restore that only runs at loot time fixes the database one raid too late. put it
+    // right behind the zeroing instead.
+    private sealed class GoonRotationPatch() : AbstractPatch(OwnPrefix + ".goonguard")
+    {
+        protected override MethodBase GetTargetMethod()
+            => AccessTools.Method(typeof(SPTarkov.Server.Core.Services.InRaid.GoonLocationSpawnService), "AdjustGoonMapSpawns");
+
+        [PatchPostfix]
+        private static void Postfix() => _instance?.RestoreKnightChance("after SPT's goon rotation");
     }
 
     // Wrap the caller's generator call so foreign prefixes/postfixes on the generator
@@ -110,16 +124,15 @@ public class IcebreakerLootFirewall(
 
     private static bool Ours(string id) => IcebreakerLocation.Matches(id);
 
-    // GOON-SYSTEM GUARD (2026-08-11, found while moving spawns onto BSG's wave generator).
-    // SPT relocates the goons daily by zeroing BossChance on EVERY bossKnight row on EVERY
-    // map, then restoring it on one randomly-chosen map from its own location pool — a pool
-    // our map will never be in. our T1 knight row is a bossKnight row, so it gets zeroed and
-    // the knight simply never arrives. the zeroing hits the LIVE database while the client
-    // is served a CLONE taken moments earlier, so restoring here (after the clone, every
-    // raid start, whatever map is loading) leaves the database correct for the next clone.
-    // runs for other maps too — otherwise a customs raid between two icebreaker raids
-    // leaves ours zeroed for the next one.
-    private void RestoreKnightChance()
+    // GOON-SYSTEM GUARD (2026-08-11, clone-order correction 2026-09-14). SPT relocates the
+    // goons by zeroing BossChance on EVERY bossKnight row on EVERY map (post-db-load, then
+    // every RotationIntervalHours from the update loop), restoring it only on one map from
+    // its own location pool, which ours is never in. our T1 knight row is a bossKnight row,
+    // so it gets zeroed and the knight never arrives. StartLocalRaid clones the location
+    // BEFORE loot generation, so the raid-start restore below only helps the NEXT raid;
+    // GoonRotationPatch restores immediately behind each zeroing, and the raid-start call
+    // stays as the backstop plus the Info line that proves what the client was served.
+    private void RestoreKnightChance(string when)
     {
         try
         {
@@ -128,11 +141,26 @@ public class IcebreakerLootFirewall(
             foreach (var row in spawns)
                 if (row.BossName == "bossKnight" && row.BossChance != 100)
                 {
+                    _log.Info($"[Icebreaker] knight T1 spawn chance was {row.BossChance}, restored to 100 {when}");
                     row.BossChance = 100;
-                    _log.Debug("[Icebreaker] knight T1 spawn chance restored to 100 (SPT's goon relocation had zeroed it)");
                 }
         }
         catch (Exception e) { _log.Warning($"[Icebreaker] knight chance restore failed: {e.Message}"); }
+    }
+
+    // what the client's clone of this raid actually carries — the clone is taken before
+    // this runs, so a zero here means the knight is already gone for this raid
+    private void LogKnightChanceForRaid()
+    {
+        try
+        {
+            var spawns = locationTable.GetLocation(IcebreakerLocation.Key)?.Base?.BossLocationSpawn;
+            if (spawns is null) return;
+            foreach (var row in spawns)
+                if (row.BossName == "bossKnight")
+                    _log.Info($"[Icebreaker] knight T1 row at raid start: chance {row.BossChance} zone {row.BossZone} trigger {row.TriggerId}");
+        }
+        catch (Exception e) { _log.Warning($"[Icebreaker] knight row read failed: {e.Message}"); }
     }
 
     private List<SpawnpointTemplate> GenerateLocationLoot(string locationId, Func<List<SpawnpointTemplate>> generate)
@@ -140,7 +168,8 @@ public class IcebreakerLootFirewall(
         // raid-context latch: loot generates at StartLocalRaid, bots on later requests —
         // this is the only place the server tells us which map the active raid is on
         IcebreakerRaidContext.OnIcebreaker = Ours(locationId);
-        RestoreKnightChance();
+        if (Ours(locationId)) LogKnightChanceForRaid();
+        RestoreKnightChance("at raid start");
         if (!Ours(locationId)) return generate();
 
         lock (Gate) // raid starts are rare; simplest way to keep suspend/restore atomic

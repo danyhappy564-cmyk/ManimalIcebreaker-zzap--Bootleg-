@@ -1,0 +1,202 @@
+{
+  "6aa83f652bec3212bf930002": {
+    "QuestName": "Wiring the Vessel",
+    "_id": "6aa83f652bec3212bf930002",
+    "traderId": "5935c25fb3acc3127c3d8cd9",
+    "type": "PickUp",
+    "location": "882b2fa04bbd616567022938",
+    "image": "/files/quest/icon/Wiring_The_Vessel_Banner",
+    "acceptanceAndFinishingSource": "eft",
+    "arenaLocations": [],
+    "instantComplete": false,
+    "isKey": false,
+    "secretQuest": false,
+    "gameModes": [],
+    "progressSource": "eft",
+    "rankingModes": [],
+    "side": "Pmc",
+    "canShowNotificationsInGame": true,
+    "restartable": false,
+    "status": 0,
+    "description": "6aa83f652bec3212bf930002 description",
+    "startedMessageText": "6aa83f652bec3212bf930002 startedMessageText",
+    "successMessageText": "6aa83f652bec3212bf930002 successMessageText",
+    "failMessageText": "6aa83f652bec3212bf930002 failMessageText",
+    "acceptPlayerMessage": "",
+    "declinePlayerMessage": "",
+    "completePlayerMessage": "",
+    "changeQuestMessageText": "",
+    "name": "6aa83f652bec3212bf930002 name",
+    "note": "6aa83f652bec3212bf930002 note",
+    "conditions": {
+      "AvailableForFinish": [
+        {
+          "conditionType": "VisitPlace",
+          "dynamicLocale": false,
+          "globalQuestCounterId": "",
+          "id": "6aa83f652bec3212bf93002c",
+          "index": 0,
+          "parentId": "",
+          "target": "fix_element_one",
+          "value": 1,
+          "visibilityConditions": []
+        },
+        {
+          "conditionType": "VisitPlace",
+          "dynamicLocale": false,
+          "globalQuestCounterId": "",
+          "id": "6aa83f652bec3212bf93002d",
+          "index": 1,
+          "parentId": "",
+          "target": "fix_element_02",
+          "value": 1,
+          "visibilityConditions": []
+        },
+        {
+          "conditionType": "VisitPlace",
+          "dynamicLocale": false,
+          "globalQuestCounterId": "",
+          "id": "6aa83f652bec3212bf93002e",
+          "index": 2,
+          "parentId": "",
+          "target": "fix_element_03",
+          "value": 1,
+          "visibilityConditions": []
+        },
+        {
+          "conditionType": "LeaveItemAtLocation",
+          "dogtagLevel": 0,
+          "dynamicLocale": false,
+          "globalQuestCounterId": "",
+          "id": "6aa83f652bec3212bf93002f",
+          "index": 3,
+          "isEncoded": false,
+          "maxDurability": 100,
+          "minDurability": 0,
+          "onlyFoundInRaid": false,
+          "parentId": "",
+          "plantTime": 10,
+          "target": [
+            "68e63a53371639e1e4004b6e"
+          ],
+          "value": 1,
+          "visibilityConditions": [
+            {
+              "conditionType": "CompleteCondition",
+              "id": "6aa83f652bec3212bf930030",
+              "target": "6aa83f652bec3212bf93002c"
+            },
+            {
+              "conditionType": "CompleteCondition",
+              "id": "6aa83f652bec3212bf930031",
+              "target": "6aa83f652bec3212bf93002d"
+            },
+            {
+              "conditionType": "CompleteCondition",
+              "id": "6aa83f652bec3212bf930032",
+              "target": "6aa83f652bec3212bf93002e"
+            }
+          ],
+          "zoneId": "install_device"
+        }
+      ],
+      "AvailableForStart": [
+        {
+          "availableAfter": 0,
+          "conditionType": "Quest",
+          "dispersion": 0,
+          "dynamicLocale": false,
+          "globalQuestCounterId": "",
+          "id": "6aa83f652bec3212bf930034",
+          "index": 0,
+          "parentId": "",
+          "status": [
+            4
+          ],
+          "target": "6aa83f652bec3212bf930001",
+          "visibilityConditions": []
+        }
+      ],
+      "Fail": []
+    },
+    "rewards": {
+      "Fail": [],
+      "Started": [
+        {
+          "availableInGameEditions": [],
+          "findInRaid": false,
+          "id": "6aa83f652bec3212bf930036",
+          "index": 0,
+          "isEncoded": false,
+          "isHidden": false,
+          "items": [
+            {
+              "_id": "6aa83f652bec3212bf930035",
+              "_tpl": "68e63a53371639e1e4004b6e",
+              "upd": {
+                "StackObjectsCount": 1
+              }
+            }
+          ],
+          "target": "6aa83f652bec3212bf930035",
+          "type": "Item",
+          "unknown": false,
+          "value": 1
+        }
+      ],
+      "Success": [
+        {
+          "availableInGameEditions": [],
+          "id": "6aa83f652bec3212bf930037",
+          "index": 0,
+          "type": "Experience",
+          "value": 30000,
+          "unknown": false,
+          "isHidden": false
+        },
+        {
+          "availableInGameEditions": [],
+          "findInRaid": false,
+          "id": "6aa83f652bec3212bf930039",
+          "index": 1,
+          "isEncoded": false,
+          "isHidden": false,
+          "items": [
+            {
+              "_id": "6aa83f652bec3212bf930038",
+              "_tpl": "5696686a4bdc2da3298b456a",
+              "upd": {
+                "StackObjectsCount": 5400
+              }
+            }
+          ],
+          "target": "6aa83f652bec3212bf930038",
+          "type": "Item",
+          "unknown": false,
+          "value": 5400
+        },
+        {
+          "availableInGameEditions": [],
+          "gameMode": [
+            "regular",
+            "pve"
+          ],
+          "id": "6aa83f652bec3212bf93003a",
+          "index": 2,
+          "isHidden": false,
+          "items": [
+            {
+              "_id": "6aa83f652bec3212bf930033",
+              "_tpl": "5d235bb686f77443f4331278"
+            }
+          ],
+          "loyaltyLevel": 1,
+          "target": "6aa83f652bec3212bf930033",
+          "traderId": "5935c25fb3acc3127c3d8cd9",
+          "type": "AssortmentUnlock",
+          "unknown": false
+        }
+      ]
+    }
+  }
+}
