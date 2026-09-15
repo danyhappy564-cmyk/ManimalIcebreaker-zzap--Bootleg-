@@ -333,6 +333,45 @@ NullReferenceException
 메서드는 이름으로 찾습니다(`AccessTools.TypeByName`). BSG가 이름을 바꾸면 `Prepare`
 가 `false` 를 돌려주고 이 패치만 조용히 빠집니다 — `PatchAll` 이 통째로 죽지 않게.
 
+## 실전 확인 (2026-09-15 저녁 라이드)
+
+위 두 수정이 실제로 발동한 것을 로그로 확인했습니다. **증상이 안 보인다**가 아니라
+**메커니즘이 돌았다**는 기록입니다.
+
+**시체 동상 에어백** — 한 판에 4번 잡았습니다. 수정이 없었으면 그 4구가 애니메이션 자세
+그대로 굳었을 것입니다.
+
+```
+[CullDeath] OfflinePlayerCulling.ApplyVisibleState threw (4 this session) —
+            swallowed so the rest of OnDead runs and the body still ragdolls.
+```
+
+**T3 선행 조건** — 플레이어가 마커 **5m** 안까지 들어갔는데도 백스톱이 안 터졌고,
+**T2가 뜬 직후에야** 발동했습니다. 선행 조건이 없었으면 훨씬 전에 터졌을 거리입니다.
+
+```
+[Waves] botEvent 'T2' raised t=132s
+[WaveBackstop] wedge approach: a player got within 5m of the spawn markers ... raising 'T3'
+[Waves] botEvent 'T3' raised t=134s
+```
+
+### 이 맵 탓이 아닌 것으로 확인된 것들
+
+- **엔진룸 교전·군즈·최종 웨이브의 프레임 드랍** — 자체 계측이 답을 갖고 있었습니다.
+  스터터 93건 전부 `OURS=1~2ms`, 나머지가 전부 `UNTRACKED` 입니다. 쇄빙선 코드가 한
+  일이 아닙니다.
+  ```
+  [Stutter] f=2248 1023ms frame: OURS=1.7ms UNTRACKED=1021ms distCull=1.3ms ...
+  ```
+- **블디가 탄창 비면 장전도 안 하고 서 있던 것** — `Use Items Anywhere` 2.1.4 가 BSG의
+  static `Inventory.FastAccessSlots` 배열을 합집합으로 늘려서, SAIN의 리로드 판정이 매 틱
+  `IndexOutOfRangeException` 을 던지고 있었습니다. UIA 2.1.3 에서는 같은 맵·같은 설정으로
+  **0건**입니다. BlackDiv 가 바닐라 전투 레이어를 빼고 SAIN만 남겨두기 때문에 이 맵에서
+  증상이 유독 크게 보였을 뿐, 원인은 이 레포 밖입니다.
+- **ORBIT** 이 이 맵에서 `The given key 'icebreaker' was not present in the dictionary` 로
+  던집니다. `RaidFirewall` 이 삼켜서 다른 모드는 멀쩡하지만 ORBIT 자체는 이 맵에서
+  비활성입니다. 맵별 테이블에 `icebreaker` 항목이 필요합니다(해당 모드 쪽 수정).
+
 ## 1.1.3 동기화
 
 원작 `1.1.3` 태그를 머지했습니다. 상류는 콘텐츠 위주, 이 포크는 코드 수정 위주라
