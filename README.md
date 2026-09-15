@@ -285,9 +285,9 @@ dotnet build ManimalIcebreaker.sln
 - **JSON 전수 파싱** — 53개 전부 정상
 - **중괄호 균형** — 수정된 6개 소스 전부 균형
 
-### 1.1.3이 추가한 하드 의존성 — 인터체인지는 떼어냈습니다
+### ⚠️ 1.1.3이 추가한 새 하드 의존성
 
-상류가 의존성 둘을 추가했습니다. 하나는 남기고 하나는 뺐습니다.
+상류가 의존성을 하나 더 걸었습니다. **없으면 모드가 로드되지 않습니다.**
 
 ```csharp
 // icebreaker-server/IcebreakerMod.cs
@@ -305,39 +305,8 @@ dotnet build ManimalIcebreaker.sln
   있습니다.
 - **`com.arys.unitytoolkit`** — 신규
 
-#### `com.manimal.interchange` — **제거함**
-
-이 의존성이 존재하는 이유는 Boreas 6부를 **인터체인지에서도** 할 수 있게 하려는
-것뿐입니다. 1.1.3이 그 목표의 `InZone` 목록을 이렇게 넓혔습니다:
-
-```diff
-- "location": "5704e554d2720bac5b8b456e"    (쇼어라인)
-+ "location": "any"
--   "boreas_camp_resort"
-+   "boreas_camp_resort", "q14_10_kill_ice"
--   "Shoreline"
-+   "Shoreline", "Interchange"
-```
-
-`InZone` 은 **OR 조건**입니다. 1.1.3 이전에 이 퀘스트가 쓰던 쇼어라인 존
-`boreas_camp_resort` 만으로 그대로 완료됩니다. 인터체인지는 **선택지가 하나 는 것**이지
-필수가 된 게 아닙니다.
-
-선택적인 두 번째 처치 장소 하나 때문에 모드 전체가 로드를 거부하는 건 맞지 않고,
-인터체인지 백포트가 **여러 변종으로 돌아다니는 상황**이라 더 그렇습니다. 서버
-(`IcebreakerMod.ModDependencies`)와 클라(`Plugin` 의 `BepInDependency`) 양쪽에서
-제거했습니다.
-
-**퀘스트 데이터는 건드리지 않았습니다.** `q14_10_kill_ice` 존 ID는 그대로 두었으므로,
-그 존을 제공하는 인터체인지를 쓰는 사람에게는 여전히 처치가 집계됩니다. 없으면 그냥
-안 걸릴 뿐입니다.
-
-#### `com.arys.unitytoolkit` — **유지**
-
-이건 실제 의존성이라 뺄 수 없습니다. `icebreaker-client.csproj` 가
-`BepInEx\plugins\UnityToolkit\ZLinq.dll` 을 직접 참조하고, `verification/
-ClientAudioChecks.cs` 가 이 선언이 있는지 검사합니다. 선언만 빼면 로드는 되고 실행 중
-어셈블리를 못 찾아 터집니다.
+인터체인지 백포트가 설치돼 있지 않거나 버전이 안 맞으면 아이스브레이커가 통째로 안
+켜집니다. 1.1.0에서는 없던 요구사항입니다.
 
 ### 검증하지 못한 것
 
