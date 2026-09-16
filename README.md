@@ -333,6 +333,38 @@ NullReferenceException
 메서드는 이름으로 찾습니다(`AccessTools.TypeByName`). BSG가 이름을 바꾸면 `Prepare`
 가 `false` 를 돌려주고 이 패치만 조용히 빠집니다 — `PatchAll` 이 통째로 죽지 않게.
 
+## 한국어 로케일 (2026-09-16)
+
+`TranslatedLocales` 에 `kr` 를 추가했습니다. 맵 이름·설명, 로딩 배너 3종, 탈출구
+이름, 클라 플러그인 UI 문구까지 `ru` 와 같은 범위입니다.
+
+**왜 한글패치 모드로는 안 됐나.** 로케일을 쓰는 쪽이 `LazyLoad` 트랜스포머라서
+**`.Value` 를 읽을 때마다 영어가 다시 덮입니다.**
+
+```csharp
+kv.Value.AddTransformer(locale =>
+{
+    locale[IcebreakerLocation.Id + " Name"] = "Icebreaker";   // ← 읽을 때마다 실행
+    ...
+    if (translated is not null)
+        foreach (var (key, text) in translated) locale[key] = text;   // ← 여기만 이김
+    return locale;
+});
+```
+
+그래서 외부 로케일 파일이 이 키들을 뭐라고 적어두든 소용이 없고, **언어별 테이블에
+넣는 것만 유일하게 이깁니다.** 원작이 `ru` / `ch` 를 그렇게 넣은 것도 같은 이유입니다.
+
+키는 두 가지 형태를 전부 채웁니다 — 바닐라 맵도 그렇습니다(예: `bigmap` 과
+`56f40101d2720b2a4d8b45d6 Name` 이 둘 다 존재).
+
+| 키 | 쓰이는 곳 |
+|---|---|
+| `882b2fa04bbd616567022938 Name` | 맵 선택 카드 제목 |
+| `icebreaker` | 맵 목록·트랜짓 등 맵 키로 참조하는 곳 |
+| `882b2fa04bbd616567022938 Description` | 맵 선택 카드 설명 (`LocationInfoPanel`) |
+| `Icebreaker_Exit_Heli` | 탈출 타이머 패널의 탈출구 이름 |
+
 ## 실전 확인 (2026-09-15 저녁 라이드)
 
 위 두 수정이 실제로 발동한 것을 로그로 확인했습니다. **증상이 안 보인다**가 아니라

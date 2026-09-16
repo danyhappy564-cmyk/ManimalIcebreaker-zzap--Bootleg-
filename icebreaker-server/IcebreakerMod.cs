@@ -128,6 +128,11 @@ public class IcebreakerMod(
         + "\n\n"
         + "Похоже, Paradigm Shipping и TerraGroup приложили немало усилий, чтобы ледокол не мелькал в прессе, а его маршруты и задачи оставались засекреченными.";
 
+    private const string IcebreakerBlurbKr =
+        "핀란드만, 타르코프를 둘러싼 봉쇄망 안에 물류 기업 패러다임 시핑 소유의 원자력 쇄빙선 \"보레아스\"가 갇혀 있습니다. \"보레아스\"가 무엇을 위해 그곳에 있는지, 무엇을 싣고 있는지는 아직 알려지지 않았습니다."
+        + "\n\n"
+        + "패러다임 시핑과 테라그룹은 이 쇄빙선이 언론에 오르내리지 않도록, 항로와 임무가 기밀로 남도록 상당한 공을 들인 것으로 보입니다.";
+
     private static readonly Dictionary<string, (string Key, string Text)[]> TranslatedLocales = new()
     {
         ["ru"] = new[]
@@ -176,6 +181,46 @@ public class IcebreakerMod(
             ("blackdiv_banner Description", "时不时地，塔科夫就会流传关于一个既不属于 USEC 也不属于 BEAR 的秘密部队的传言。坊间传闻，这些特殊行动人员会在夜间行动，肃清相关区域，回收宝贵的 TerraGroup 数据。但在 PMC 行动人员中，几乎没有人相信这个所谓的“Black Division”真的存在，因为在当前形势下，让成建制的整支作战小组自由出入封锁区根本不可能。\n……吗？"),
             ("wedge_banner Name", "“Wedge”特别行动队"),
             ("wedge_banner Description", "来自少数仍在塔科夫活动的PMC的情报和特殊渠道的监控记录显示，有多架武装直升机正在向芬兰湾移动。我们截获的无线电片段提到了一个代号——“Wedge”。其成员来自世界各地——比如 前SAS 和前摩萨德。Wedge同时也是其指挥官的呼号，他是 Black Division 的精英行动人员，负责在“北风之神”号上的秘密行动，以及对一切可能的无关知情人员的“清理”工作。"),
+        },
+
+        // Korean. A client-side translation mod cannot do this job from the outside:
+        // the transformer above writes the english strings on every read of a locale,
+        // so anything a locale file sets for these keys is overwritten again. The
+        // per-language table is the only place that wins, which is why this lives here.
+        ["kr"] = new[]
+        {
+            (IcebreakerLocation.Id + " Name", "쇄빙선"),
+            (IcebreakerLocation.Key, "쇄빙선"),
+            (IcebreakerLocation.Id + " Description", IcebreakerBlurbKr),
+            ("Icebreaker_Exit_Heli", "헬리콥터"),
+
+            ("icebreaker_cover Name", "쇄빙선"),
+            ("icebreaker_cover Description", IcebreakerBlurbKr),
+
+            ("blackdiv_banner Name", "블랙 디비전"),
+            ("blackdiv_banner Description",
+                "이따금 타르코프에는 USEC에도 BEAR에도 속하지 않는 특수 부대에 관한 소문이 돕니다. 모닥불 앞에서 오가는 이야기에 따르면, 이 요원들은 야간에 통제 구역을 정리하고 테라그룹의 중요 데이터를 빼돌린다고 합니다. 하지만 이른바 \"블랙 디비전\"이 실재한다고 믿는 PMC는 거의 없습니다. 지금 상황에서 전투 그룹 전체를 봉쇄망 안팎으로 자유롭게 드나들게 하는 것은 사실상 불가능하기 때문입니다."),
+
+            ("wedge_banner Name", "\"웨지\"의 특수 분대"),
+            ("wedge_banner Description",
+                "타르코프에 아직 남아 있는 소수의 PMC 정보망이 보내온 정찰·감시 보고에 따르면, 여러 대의 전투 헬기가 핀란드만 쪽으로 이동 중입니다. 감청된 무전에는 \"웨지\"라는 호출명이 등장합니다. SAS와 모사드를 비롯해 세계 각지의 특수부대 출신으로 꾸려진 분대를 이끄는 웨지는, 쇄빙선 \"보레아스\"에서 진행되는 비밀 작전을 맡은 블랙 디비전의 고참 요원입니다. 그들이 그곳에서 무엇을 노리는지 밝힌 채 살아 돌아온 사람은 아무도 없습니다."),
+
+            ("Icebreaker_UI_ChainDoor_Open", "열기"),
+            ("Icebreaker_UI_ChainDoor_Plant", "폭약 설치"),
+            ("Icebreaker_UI_ChainDoor_Planting", "폭약 설치 중"),
+            ("Icebreaker_UI_SealedDoor_Unseal", "문 개방"),
+            ("Icebreaker_UI_SealedDoor_Reseal", "문 밀폐"),
+            ("Icebreaker_UI_SealedDoor_Unsealing", "문 개방 중"),
+            ("Icebreaker_UI_SealedDoor_Sealing", "문 밀폐 중"),
+            ("Icebreaker_UI_Keypad_EnterCode", "코드 입력"),
+            ("Icebreaker_UI_Keypad_Unlocked", "문 잠금 해제됨"),
+            ("Icebreaker_UI_Hatch_Melt", "얼음 녹이기 (토치)"),
+            ("Icebreaker_UI_Hatch_TurnHandle", "핸들 돌리기"),
+            ("Icebreaker_UI_Hatch_Open", "해치 열기"),
+            ("Icebreaker_UI_Heli_Signal", "녹색 조명탄으로 헬기를 불러 탈출하십시오"),
+            ("Icebreaker_UI_Heli_Inbound", "헬기에 신호를 보냈습니다 — 접근 중, 헬리패드를 사수하십시오"),
+            ("Icebreaker_UI_Heli_Landed", "헬기가 착륙했습니다 — 탈출 가능"),
+            ("Icebreaker_UI_Fare_NotEnough", "밀수업자들이 건너는 대가로 {0:N0} 루블을 요구합니다 (소지 {1:N0})"),
         },
     };
 
