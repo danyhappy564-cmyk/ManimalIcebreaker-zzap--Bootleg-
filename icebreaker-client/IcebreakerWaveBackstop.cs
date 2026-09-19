@@ -37,6 +37,17 @@ namespace Manimal.Icebreaker
         // box each, their zones sit alone at the far end of the ship, and the box is authored
         // tens of metres short of the squad, so 40m is unambiguous.
         //
+        // BUT (2026-09-19 field report): at the junction near the engine room / helipad top
+        // / helipad underdeck, all unbanded - a 40m sphere with no height limit reaches
+        // through several 3-4m decks at once. A player standing at that junction can be
+        // simultaneously "close" to BotZoneEngineHide (a different deck) and both
+        // BotZoneSternTop/BotZoneStern (two more decks), so Hide, Sten and whichever tier
+        // guard is armed all trip in the same 0.5s tick - three squads dumped on top of the
+        // player at once, and with SAIN active they hear it and are already moving before the
+        // player rounds the corner. Banding these to SameDeck too (below) does not shrink the
+        // 40m horizontal reach that lets the backstop see a squad coming from far off - it
+        // only stops it from also counting a completely different deck's squad as "close".
+        //
         // T3 and T4 are a different shape and needed a second, much tighter radius (added
         // 2026-09-15). They are one authored id each rather than a group-size family, and
         // their box sits in or at the room they fill instead of out on the approach. Backing
@@ -51,8 +62,11 @@ namespace Manimal.Icebreaker
         // A sphere reaches through a deck. Decks here are ~3-4m apart, so a 12m sphere round
         // a marker on the top deck also covers the floor below it and would fire T4 while the
         // player is still on the stairs - the early raise the paragraph above is trying to
-        // avoid. Band the tight guards to roughly one deck so "close" means close on the same
-        // floor. The 40m approach guards deliberately reach across decks and stay unbanded.
+        // avoid. Band every guard to roughly one deck so "close" means close on the same
+        // floor - Hide and Sten too (2026-09-19): their 40m horizontal reach is intentional
+        // (see above), but nothing needed the sphere to also reach vertically through decks
+        // it was never meant to see, and unbanded it was tripping multiple far-apart zones'
+        // guards at once from a single stairwell junction.
         private const float SameDeck = 3.5f;
 
         // A tier guard stays disarmed until the tier before it has actually been raised.
@@ -87,8 +101,8 @@ namespace Manimal.Icebreaker
 
         private static readonly Guard[] Guards =
         {
-            new Guard("Hide", null, null, ApproachRadius, float.MaxValue, "engine room", "BotZoneEngineHide"),
-            new Guard("Sten", null, null, ApproachRadius, float.MaxValue, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
+            new Guard("Hide", null, null, ApproachRadius, SameDeck, "engine room", "BotZoneEngineHide"),
+            new Guard("Sten", null, null, ApproachRadius, SameDeck, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
             new Guard(null, "T3", "T2", ArrivedRadius, SameDeck, "wedge approach", "BotZoneOutside_t3"),
             new Guard(null, "T4", "T3", ArrivedRadius, SameDeck, "top deck", "BotZoneInside_t4"),
         };
