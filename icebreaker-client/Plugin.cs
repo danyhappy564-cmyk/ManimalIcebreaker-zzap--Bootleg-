@@ -342,13 +342,17 @@ namespace Manimal.Icebreaker
             // Tonemapping, PerfectCullingCamera): since 0.3.1, in-raid loot item icons in
             // the inventory grid render fully transparent, Icebreaker-only. Freshly-looted
             // items get their icon rendered mid-raid, while gear already in the player's
-            // inventory before spawn keeps an icon cached from the menu - which lines up
-            // with the camera donor grafting extra OnRenderImage effects onto this map's
-            // world camera that its own Cam2 never carried, if the icon render path shares
-            // that camera/chain. Rather than ship a guess at which one, skip all four by
-            // default: they were always bonus visuals, not worth broken loot icons. Clear
-            // this config back to "" to re-enable the graft once a future build isolates
-            // and fixes the actual offending component.
+            // inventory before spawn keeps an icon cached from the menu - the original
+            // theory was that this lined up with the camera donor grafting extra
+            // OnRenderImage effects onto this map's world camera that its own Cam2 never
+            // carried, if the icon render path shares that camera/chain.
+            //
+            // RULED OUT (2026-09-03): the icon bug reproduces identically whether this
+            // config is empty or the full four-name skip, so it is confirmed unrelated to
+            // the camera donor graft (see README "루팅 아이템 아이콘 반투명"). The four-name
+            // default below is kept only because those four were always bonus visuals, not
+            // because it fixes icons - the icon bug itself is still unsolved and needs a
+            // separate investigation (the icon cache/render pipeline, not this camera graft).
             //
             // TRIED AND REVERTED (2026-09): a hideout-then-icebreaker TAA/LOD-dither/light-
             // flicker report was chased hard here - emptying this list, then narrowing it to
