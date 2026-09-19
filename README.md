@@ -12,6 +12,17 @@
 4. **Full Credit & Respect:** I will always credit original creators on GitHub and prioritize their decisions above all else.
 5. **Support Original Creators:** Instead of using my ports, please visit the original authors' Forge pages to leave kind words or tips.
 
+## 변경 이력
+
+- 2026-09-19 06:54 — 엔진룸에 들어가서 헬리패드 위/아래·웨지 입구 근처로 가면
+  적 스쿼드 3개가 한꺼번에 몰려서 스폰되던 문제 수정. 원래 "박스를 놓쳤을 때
+  대신 스폰시켜주는" 보험 로직이 높이(층) 구분 없이 반경만 보고 있어서, 서로
+  다른 층에 있는 스쿼드들이 같은 순간에 한꺼번에 튀어나오고 있었음 — 이제
+  "같은 층에 있을 때만" 대신 스폰하도록 제한. **실제 라이드로 재현 확인은
+  아직 못함, 다음 라이드에서 확인 필요.**
+- 2026-09-18 07:41 — 랙맨(Ragman) 퀘스트 대사 중 한 곳이 다른 대사들과 다르게
+  호칭이 "아퍼"로 잘못 남아있던 것 수정 ("형씨"로 통일).
+
 ---
 
 # ManimalIcebreaker (fork)
