@@ -169,6 +169,24 @@ namespace Manimal.Icebreaker
                     place.GrenadePlaces = Array.Empty<ThrowGrenadePlace>(); // retail's grenade-place class is 1.0-only
                     place.Collider = go.GetComponent<BoxCollider>();
 
+                    // 2026-09-20: the Hide/Sten boxes are narrow enough that a normal route
+                    // can walk around them entirely (README 09/08 - the same box was crossed
+                    // at t=43s in one raid and t=1032s in the next). IcebreakerWaveBackstop
+                    // was added as a proximity fallback for exactly this, but its own
+                    // distance/height heuristics have needed three rounds of fixes since -
+                    // the actual root cause is that the authored box itself is too easy to
+                    // miss, not that the fallback's math was wrong. Widen the box footprint
+                    // (X/Z only, not height, so this cannot bleed into a different deck the
+                    // way the old unbanded backstop sphere did) so a normal approach touches
+                    // it directly. The backstop stays as a last-resort net for routes this
+                    // still misses, but should fire far less often now.
+                    if (goPath.Contains("Hide") || goPath.Contains("Sten"))
+                    {
+                        var beforeSize = place.Collider.size;
+                        place.Collider.size = new Vector3(beforeSize.x * 3f, beforeSize.y, beforeSize.z * 3f);
+                        Plugin.Log.LogDebug($"[AIPlaces] widened '{go.name}' trigger box {beforeSize} -> {place.Collider.size} (Hide/Sten corridor-width fix)");
+                    }
+
                     // wire the logic: EventRaise if the ref resolved; else the group-size
                     // reimpl for the three BD spawn boxes (name-matched)
                     long logicRef = (f?["InfoLogicAllEnemy"] as JObject)?.Value<long?>("ref") ?? 0;
