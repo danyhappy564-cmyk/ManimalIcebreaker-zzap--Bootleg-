@@ -67,6 +67,9 @@ namespace Manimal.Icebreaker
         // is the trade the player asked for: on 09-15 the wedge-approach squad only turned
         // up once he was climbing to the third deck, and on the next raid the top deck squad
         // never came at all.
+        //
+        // (2026-09-20: T3 no longer uses this constant - see the removed-guard note above
+        // the Guards array below. T4 still does.)
         private const float ArrivedRadius = 12f;
 
         // A sphere reaches through a deck. Decks here are ~3-4m apart, so a 12m sphere round
@@ -109,11 +112,24 @@ namespace Manimal.Icebreaker
             }
         }
 
+        // T3's own guard was REMOVED (2026-09-20 field report + log). Its zone
+        // (BotZoneOutside_t3, "wedge approach") sits only ~8.6m from T2's zone
+        // (BotZoneKorr_t2) - one flight of stairs. A player reaching T2 legitimately
+        // (no shortcut needed) can already be within this guard's own 12m/SameDeck
+        // window, so it fired 2 seconds after T2 raised, 5m from the spawn markers:
+        //   [Waves] botEvent 'T2' raised t=155s
+        //   [WaveBackstop] wedge approach: within 5m ... raising 'T3'
+        //   [Waves] botEvent 'T3' raised t=157s
+        // Unlike Hide/Sten (a genuinely narrow box on a long, mostly-missable
+        // approach), tightening the radius or adding a cooldown here fights the
+        // map's actual geometry rather than a detection bug - T2 and T3 are just
+        // adjacent. Went back to trusting the authored box alone for T3 (matching
+        // upstream, which has no backstop at all), and instead widened that box in
+        // IcebreakerAIPlaces.cs so a normal approach is very unlikely to miss it.
         private static readonly Guard[] Guards =
         {
             new Guard("Hide", null, null, ApproachRadius, SameDeck, "engine room", "BotZoneEngineHide"),
             new Guard("Sten", null, null, ApproachRadius, SameDeck, "stern + helipad", "BotZoneSternTop", "BotZoneStern"),
-            new Guard(null, "T3", "T2", ArrivedRadius, SameDeck, "wedge approach", "BotZoneOutside_t3"),
             new Guard(null, "T4", "T3", ArrivedRadius, SameDeck, "top deck", "BotZoneInside_t4"),
         };
 

@@ -180,11 +180,18 @@ namespace Manimal.Icebreaker
                     // way the old unbanded backstop sphere did) so a normal approach touches
                     // it directly. The backstop stays as a last-resort net for routes this
                     // still misses, but should fire far less often now.
-                    if (goPath.Contains("Hide") || goPath.Contains("Sten"))
+                    //
+                    // T3_trigger widened too (2026-09-20, second field report): its backstop
+                    // guard was removed instead (IcebreakerWaveBackstop.cs) because that zone
+                    // sits only ~8.6m from T2's, so the guard fired 2s after T2 from a normal
+                    // approach, not a missed box - tightening its radius further fights the
+                    // map's own geometry. Widening the box here is the same margin-of-safety
+                    // treatment as Hide/Sten, now that T3 is back to trusting the box alone.
+                    if (goPath.Contains("Hide") || goPath.Contains("Sten") || goPath.Contains("T3_trigger"))
                     {
                         var beforeSize = place.Collider.size;
                         place.Collider.size = new Vector3(beforeSize.x * 1.5f, beforeSize.y, beforeSize.z * 1.5f);
-                        Plugin.Log.LogDebug($"[AIPlaces] widened '{go.name}' trigger box {beforeSize} -> {place.Collider.size} (Hide/Sten corridor-width fix)");
+                        Plugin.Log.LogDebug($"[AIPlaces] widened '{go.name}' trigger box {beforeSize} -> {place.Collider.size} (corridor-width fix)");
                     }
 
                     // wire the logic: EventRaise if the ref resolved; else the group-size
