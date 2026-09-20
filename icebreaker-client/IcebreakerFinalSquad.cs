@@ -71,10 +71,39 @@ namespace Manimal.Icebreaker
                 finally
                 {
                     foreach (var request in requests)
-                        if (request.Status == TaskStatus.RanToCompletion && request.Result != null)
+                        if (request.Status == TaskStatus.RanToCompletion && request.Result != null &&
+                            request.Result.Count == 1 && request.Result.Profiles[0] != null && !request.Result.SpawnStopped)
                             ready.Add(request.Result);
                 }
                 token.ThrowIfCancellationRequested();
+
+                // 2026-09-21: the same server-side profile hand-off flakiness that can empty
+                // out the leader (above) can also empty out an escort slot - a field log
+                // showed 3 of 5 total T4 defers were exactly this ("profile preparation did
+                // not produce five ready bots"), with BSG's own DelayBossSpawn loop eventually
+                // succeeding ~26s later, by which point the player had walked past the room
+                // and the squad spawned behind them instead of ahead. One bounded retry for
+                // just the missing slots costs nothing on the happy path (missing == 0) and
+                // should cut down how often the slower outer retry loop is needed.
+                int missing = 5 - ready.Count;
+                if (missing > 0)
+                {
+                    Plugin.Log.LogWarning($"[T4Squad] {missing} escort profile(s) missing on first pass - requesting replacement(s) before giving up");
+                    var retryRequests = new Task<BotCreationData>[missing];
+                    for (int i = 0; i < retryRequests.Length; i++)
+                        retryRequests[i] = BotCreationData.Create(new GetProfileDataParams(EPlayerSide.Savage,
+                            wave.EscortType, wave.EscortDif, wave.Time, spawnParams, false),
+                            boss._botCreator, 1, boss._spawner);
+                    try { await Task.WhenAll(retryRequests); }
+                    finally
+                    {
+                        foreach (var request in retryRequests)
+                            if (request.Status == TaskStatus.RanToCompletion && request.Result != null &&
+                                request.Result.Count == 1 && request.Result.Profiles[0] != null && !request.Result.SpawnStopped)
+                                ready.Add(request.Result);
+                    }
+                    token.ThrowIfCancellationRequested();
+                }
                 if (ready.Count != 5 || ready.AsValueEnumerable().Any(d => d.Count != 1 || d.Profiles[0] == null || d.SpawnStopped))
                     throw new InvalidOperationException("T4 profile preparation did not produce five ready bots");
                 if (ready.AsValueEnumerable().Select(d => d.Profiles[0].Id).Distinct().Count() != 5)
