@@ -31,7 +31,17 @@ namespace Manimal.Icebreaker
         // Far enough that the squad is placed before the area is in view, and far short of
         // the distance from any player start to these zones (104m to the engine hides,
         // 156m to the stern), so a raid can never open with the backstop already tripped.
-        private const float ApproachRadius = 40f;
+        //
+        // SHRUNK 40 -> 20 (2026-09-20 field report): 40m was also farther than HALF the
+        // distance between the hide squad (z=-21) and the stern squads (z=-67..-71) - a
+        // 46-50m gap. Standing anywhere near the midpoint (roughly z=-45, "partway through
+        // the engine room") put a player within 40m of BOTH, so Hide and Sten fired
+        // together even after 2026-09-19's deck band, because the two are on similar decks
+        // and the band never applied. 20m is comfortably under half that gap (23-25m) for
+        // both, so no point between the two zones can be "close" to both at once, while
+        // still catching a genuinely missed box well before the old 17-minute-late failure
+        // mode. Not re-verified in a raid.
+        private const float ApproachRadius = 20f;
 
         // Hide and Sten get the approach radius: they are group-size families with a single
         // box each, their zones sit alone at the far end of the ship, and the box is authored
