@@ -183,7 +183,7 @@ namespace Manimal.Icebreaker
                     if (goPath.Contains("Hide") || goPath.Contains("Sten"))
                     {
                         var beforeSize = place.Collider.size;
-                        place.Collider.size = new Vector3(beforeSize.x * 3f, beforeSize.y, beforeSize.z * 3f);
+                        place.Collider.size = new Vector3(beforeSize.x * 1.5f, beforeSize.y, beforeSize.z * 1.5f);
                         Plugin.Log.LogDebug($"[AIPlaces] widened '{go.name}' trigger box {beforeSize} -> {place.Collider.size} (Hide/Sten corridor-width fix)");
                     }
 
