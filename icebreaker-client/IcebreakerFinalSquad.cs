@@ -34,13 +34,31 @@ namespace Manimal.Icebreaker
         private static async Task Spawn(BotBossSpawn boss, BotCreationData leader,
             BossLocationSpawn wave, BotSpawnParams spawnParams, BotZone zone)
         {
-            var ready = new List<BotCreationData> { leader };
             var token = boss._spawner.GetCancelToken();
+            var ready = new List<BotCreationData>();
             bool submitted = false;
             try
             {
+                // 2026-09-21: BSG occasionally hands this hook a leader BotCreationData
+                // whose profile never got attached (seen once in a field log: "T4 leader
+                // must contain one valid profile", squad deferred and never retried since
+                // - see the comment on the deferred-retry guard below). Rather than give up
+                // immediately, request one fresh leader profile ourselves with the same
+                // BotCreationData.Create call the four escorts already use below, just with
+                // the boss's own type/difficulty (wave.BossType/BossDif, confirmed via
+                // Assembly-CSharp.dll field dump - same naming as EscortType/EscortDif).
+                // One retry only; if that also comes back empty, this is a real failure.
+                if (leader == null || leader.Count != 1 || leader.Profiles[0] == null)
+                {
+                    Plugin.Log.LogWarning("[T4Squad] leader profile missing on first hand-off - requesting a fresh one before giving up");
+                    leader = await BotCreationData.Create(new GetProfileDataParams(EPlayerSide.Savage,
+                        wave.BossType, wave.BossDif, wave.Time, spawnParams, false),
+                        boss._botCreator, 1, boss._spawner);
+                    token.ThrowIfCancellationRequested();
+                }
                 if (leader == null || leader.Count != 1 || leader.Profiles[0] == null)
                     throw new InvalidOperationException("T4 leader must contain one valid profile");
+                ready.Add(leader);
                 spawnParams.ShallBeGroup = new ShallBeGroupParams(true, true, 5);
                 // SPT's profile-client path may ignore Create(count), so make four
                 // explicit requests and await all of them BEFORE activating the leader.
