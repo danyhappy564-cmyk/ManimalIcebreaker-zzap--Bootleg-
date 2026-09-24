@@ -51,9 +51,22 @@ namespace Manimal.Icebreaker
                 if (leader == null || leader.Count != 1 || leader.Profiles[0] == null)
                 {
                     Plugin.Log.LogWarning("[T4Squad] leader profile missing on first hand-off - requesting a fresh one before giving up");
-                    leader = await BotCreationData.Create(new GetProfileDataParams(EPlayerSide.Savage,
+                    var original = leader;
+                    var fresh = await BotCreationData.Create(new GetProfileDataParams(EPlayerSide.Savage,
                         wave.BossType, wave.BossDif, wave.Time, spawnParams, false),
                         boss._botCreator, 1, boss._spawner);
+                    if (fresh != null && fresh.Count == 1 && fresh.Profiles[0] != null && !fresh.SpawnStopped)
+                    {
+                        // 2026-09-24: the replaced hand-off is never used again - release its slot.
+                        leader = fresh;
+                        Release(original);
+                    }
+                    else
+                    {
+                        // Retry failed too: keep BSG's own leader so the deferred-retry path
+                        // below behaves exactly like upstream, and release the unusable retry.
+                        Release(fresh);
+                    }
                     token.ThrowIfCancellationRequested();
                 }
                 if (leader == null || leader.Count != 1 || leader.Profiles[0] == null)
@@ -74,6 +87,8 @@ namespace Manimal.Icebreaker
                         if (request.Status == TaskStatus.RanToCompletion && request.Result != null &&
                             request.Result.Count == 1 && request.Result.Profiles[0] != null && !request.Result.SpawnStopped)
                             ready.Add(request.Result);
+                        else if (request.Status == TaskStatus.RanToCompletion)
+                            Release(request.Result); // unusable escort: release its slot (upstream did this via the finally below)
                 }
                 token.ThrowIfCancellationRequested();
 
@@ -101,6 +116,8 @@ namespace Manimal.Icebreaker
                             if (request.Status == TaskStatus.RanToCompletion && request.Result != null &&
                                 request.Result.Count == 1 && request.Result.Profiles[0] != null && !request.Result.SpawnStopped)
                                 ready.Add(request.Result);
+                            else if (request.Status == TaskStatus.RanToCompletion)
+                                Release(request.Result);
                     }
                     token.ThrowIfCancellationRequested();
                 }
@@ -154,6 +171,15 @@ namespace Manimal.Icebreaker
                 if (!submitted)
                     foreach (var data in ready.AsValueEnumerable().Skip(1)) data.StopSpawn();
             }
+        }
+
+        // Frees the bot reservation of a BotCreationData we decided not to use.
+        // Guarded because a half-empty hand-off is exactly what we are discarding.
+        private static void Release(BotCreationData data)
+        {
+            if (data == null || data.SpawnStopped) return;
+            try { data.StopSpawn(); }
+            catch (Exception e) { Plugin.Log.LogWarning("[T4Squad] could not release unused profile: " + e.Message); }
         }
 
         // Out-of-sight positions are preferred but not required. Requiring them threw the
