@@ -444,7 +444,10 @@ namespace Manimal.Icebreaker
             else if (eventId == "T3")
                 StartCoroutine(PlaceChargeSweep("BotZoneOutside_t3"));
             else if (eventId.StartsWith("wedges"))
+            {
                 StartCoroutine(PlaceWedgeTag()); // his guaranteed red tag — see PlaceWedgeTag
+                StartCoroutine(IcebreakerWedgeDiag.Census(eventId)); // log-only headcount (2026-09-24)
+            }
             else
                 _firedEvents.Remove(eventId); // not ours (T2 etc) — leave re-armable
         }
