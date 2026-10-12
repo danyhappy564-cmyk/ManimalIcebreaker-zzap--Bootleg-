@@ -1,10 +1,10 @@
 ### ⚠️ IMPORTANT NOTICE / DISCLAIMER
 
-**Original Author:** danauraborealis
-**Original Repository:** ManimalIcebreaker
-**Original Link:** https://github.com/danauraborealis/ManimalIcebreaker
-**License:** MIT
-**This Port By:** R_F (danyhappy564-cmyk) — unofficial, AI-assisted port. Not affiliated with or endorsed by the original author.
+- **Original Author:** danauraborealis
+- **Original Repository:** ManimalIcebreaker
+- **Original Link:** https://github.com/danauraborealis/ManimalIcebreaker
+- **License:** MIT
+- **This Port By:** R_F (danyhappy564-cmyk) — unofficial, AI-assisted port. Not affiliated with or endorsed by the original author.
 
 1. **Reflection & Take-Downs:** I deeply reflect on the ECOT incident. As an AI-assisted "vibe coder," I will immediately delete files if the original authors ask.
 2. **No Re-Distribution:** These ported builds are unverified, temporary fixes. Please do NOT re-upload or share them anywhere else.
@@ -14,6 +14,7 @@
 
 ## 변경 이력
 
+- 2026-10-13 04:38 — README 맨 위 원작자 표기를 한 줄씩 나눠 보기 쉽게 정리 (내용 변화 없음)
 - 2026-09-24 23:09 (KST) — 웨지방 봇 누락 추적용 **진단 로그 추가(게임 동작 변화 없음)**.
   09-24 로그 포함 실제 로그 5개를 세어 보니 5판 중 2판에서 웨지방이 4마리가 아니라
   3마리만 나왔고, 빠지는 봇이 판마다 달랐음(단독 블디 1마리 / 웨지의 경호원).
