@@ -12,8 +12,19 @@
 4. **Full Credit & Respect:** I will always credit original creators on GitHub and prioritize their decisions above all else.
 5. **Support Original Creators:** Instead of using my ports, please visit the original authors' Forge pages to leave kind words or tips.
 
+## 설치 전에 꼭 — 원본 모드부터 (Install the original mod first)
+
+이 저장소의 빌드는 **원본 쇄빙선(Manimal's Icebreaker Backport) 모드 위에 덮어쓰는 수정본**입니다. 맵 번들 같은 원본 파일은 들어 있지 않습니다.
+**원본 모드를 먼저 받아 설치한 뒤, 이 저장소의 압축을 그 위에 덮어써야 작동합니다.**
+
+- 원본 모드: https://sp-mod.com/mod/2866/manimals-icebreaker-backport
+
+This build only **overwrites the original Manimal's Icebreaker Backport** - it does not contain the original files (map bundles etc.).
+**Install the original mod first, then extract this build over it.** Original: https://sp-mod.com/mod/2866/manimals-icebreaker-backport
+
 ## 변경 이력
 
+- 2026-11-02 — **레이드가 끝난 뒤 메뉴에서 지난 레이드 카메라를 붙잡던 것 수정.** 렌더 진단 프로브가 모든 맵에서 레이드 카메라를 기억하고 레이드가 끝나도 놓지 않아 RAM 클리너 누수 보고에 쇄빙선이 나왔습니다(카메라 1개). 이제 그 카메라가 파괴되면 기억을 지웁니다. 확인: 빌드 오류 0, 게임 미확인.
 - 2026-10-13 04:38 — README 맨 위 원작자 표기를 한 줄씩 나눠 보기 쉽게 정리 (내용 변화 없음)
 
 전체 변경 이력 13개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 지금 마지막 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)).

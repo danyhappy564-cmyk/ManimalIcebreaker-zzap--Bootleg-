@@ -634,6 +634,11 @@ namespace Manimal.Icebreaker
         // with skybox ambient instead of overriding it) in case it needs a brightness nudge.
         private void Update()
         {
+            // zzap: SetCamera stores the raid camera on every map and this probe outlives the raid, so the destroyed camera
+            // of the last raid stayed referenced in the menu (RAM cleaner leak holder). A destroyed camera compares equal to
+            // null but still holds the managed object - drop it. A live camera is left alone (SetCamera can run before the
+            // game world exists, so no game-world check here).
+            if (!ReferenceEquals(CameraRef, null) && CameraRef == null) CameraRef = null;
             if (!FikaBridge.CanRender) return;
             if (Plugin.DiagHotkeys.Value && IceGate.On && Input.GetKeyDown(KeyCode.F8))
             {
