@@ -833,7 +833,7 @@ namespace Manimal.Icebreaker
             roamBox.Encapsulate(anchor);
             roamBox.Expand(new Vector3(4f, 2f, 4f));
             var world = Singleton<GameWorld>.Instance;
-            float giveUp = Time.time + 900f; // failsafe: never hold a squad forever
+            float giveUp = Time.time + 1800f; // failsafe: never hold a squad forever (user 11/04: 15 → 30 min)
             float nextHeavy = 0f;
             while (Time.time < giveUp)
             {
