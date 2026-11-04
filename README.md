@@ -1,3 +1,8 @@
+<p align="center">
+  <a href="README.md"><img alt="한국어 (현재 문서)" src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-%ED%98%84%EC%9E%AC%20%EB%AC%B8%EC%84%9C-1f6feb?style=for-the-badge"></a>
+  <a href="README.en.md"><img alt="English" src="https://img.shields.io/badge/English-Read%20in%20English-6e7681?style=for-the-badge"></a>
+</p>
+
 ### ⚠️ IMPORTANT NOTICE / DISCLAIMER
 
 - **Original Author:** danauraborealis
@@ -24,10 +29,7 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 
 ## 변경 이력
 
-- 2026-11-04 — **엔진룸 매복 블디가 저절로 풀리는 시간을 15분 → 30분으로 늘림(zzap v2).** 엔진룸 매복조는 엔진룸에 들어가거나 총격·발각되면 풀리는데, 아무도 안 내려오면 붙잡아 둔 지 15분 뒤 저절로 풀려 가장 가까운 플레이어를 찾아갔습니다. 이제 30분입니다. 확인: 빌드 오류 0, 게임 미확인.
-- 2026-11-02 — **레이드가 끝난 뒤 메뉴에서 지난 레이드 카메라를 붙잡던 것 수정.** 렌더 진단 프로브가 모든 맵에서 레이드 카메라를 기억하고 레이드가 끝나도 놓지 않아 RAM 클리너 누수 보고에 쇄빙선이 나왔습니다(카메라 1개). 이제 그 카메라가 파괴되면 기억을 지웁니다. 확인: 빌드 오류 0, 게임 미확인.
-
-전체 변경 이력 15개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 지금 마지막 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)).
+전체 변경 이력 15개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 최신 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). 릴리즈별 요약은 [Releases](../../releases).
 
 ---
 
