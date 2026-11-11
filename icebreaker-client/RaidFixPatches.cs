@@ -10,6 +10,7 @@ using EFT.EnvironmentEffect;
 using EFT.Interactive;
 using EFT.Game.Spawning;
 using HarmonyLib;
+using SPT.Reflection.Patching;
 using UnityEngine;
 
 namespace Manimal.Icebreaker
@@ -21,7 +22,7 @@ namespace Manimal.Icebreaker
     //
     // finalizers only run when the target actually threw — real maps never hit these paths,
     // so they're inert there. losing audio-occlusion setup / breakable-window pooling is
-    // fine for a walkable map. add more [HarmonyPatch] blocks here as later init stages
+    // fine for a walkable map. add more [IcebreakerPatchTarget] blocks here as later init stages
     // surface more shells. TODO: migrate into a proper ManimalIcebreaker client plugin,
     // gated to the icebreaker location, before distribution.
 
@@ -33,9 +34,10 @@ namespace Manimal.Icebreaker
     // leave Initialized=false, the game's guards degrade audio gracefully.
     // NOTE: the old version of this patch skipped Initialize UNCONDITIONALLY, which was
     // silently killing spatial audio on real maps too — the icebreaker gate fixes that.
-    [HarmonyPatch(typeof(SpatialAudioSystem), "Initialize")]
-    internal static class Patch_SpatialAudioInit
+    [IcebreakerPatchTarget(typeof(SpatialAudioSystem), "Initialize")]
+    internal sealed class Patch_SpatialAudioInit : IcebreakerModulePatch<Patch_SpatialAudioInit>
     {
+        [PatchPrefix]
         private static bool Prefix(SpatialAudioSystem __instance, ref Task __result)
         {
             if (!IcebreakerAcoustics.IcebreakerLoaded())
@@ -57,15 +59,18 @@ namespace Manimal.Icebreaker
     // return -1, the same "no occlusion" result BSG's own EOcclusionTest.None path uses
     // (the sound itself already Play()ed before occlusion — it just stays unoccluded).
     // silent on purpose: this fires per sound, logging would be its own spam.
-    [HarmonyPatch]
-    internal static class Patch_OcclusionWhenUninitialized
+    [IcebreakerPatchTarget]
+    internal sealed class Patch_OcclusionWhenUninitialized : IcebreakerModulePatch<Patch_OcclusionWhenUninitialized>
     {
+        internal Patch_OcclusionWhenUninitialized(MethodBase target) : base(target) { }
+
         private static IEnumerable<MethodBase> TargetMethods()
         {
             return typeof(SpatialAudioSystem).GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .AsValueEnumerable().Where(m => m.Name == "ProcessSourceOcclusion").ToArray();
         }
 
+        [PatchPrefix]
         private static bool Prefix(ref int __result)
         {
             if (SpatialAudioSystem.Initialized)
@@ -82,9 +87,10 @@ namespace Manimal.Icebreaker
     // NRE -> aborts the whole raid init through PlayerCameraController.Create. swallow:
     // every later use of rainScreenDrops_0/screenWater_0 is null-guarded (verified), so
     // the only loss is raindrops-on-visor — on a snow map.
-    [HarmonyPatch(typeof(RainController), "CameraChanged")]
-    internal static class Patch_RainScreenOnCam2
+    [IcebreakerPatchTarget(typeof(RainController), "CameraChanged")]
+    internal sealed class Patch_RainScreenOnCam2 : IcebreakerModulePatch<Patch_RainScreenOnCam2>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -97,10 +103,11 @@ namespace Manimal.Icebreaker
     // weapon-sway effector NREs (BetterValProcessor.Process via ProceduralWeaponAnimation) —
     // cosmetic sway on some weapon/bot combos; a throw here escapes into Player.LateUpdate.
     // same family as the MotionEffector.FixedTracking swallow.
-    [HarmonyPatch(typeof(BetterValProcessor), nameof(BetterValProcessor.Process))]
-    internal static class Patch_SwayEffectorNeverThrows
+    [IcebreakerPatchTarget(typeof(BetterValProcessor), nameof(BetterValProcessor.Process))]
+    internal sealed class Patch_SwayEffectorNeverThrows : IcebreakerModulePatch<Patch_SwayEffectorNeverThrows>
     {
         // silent only on the icebreaker (per-frame); vanilla keeps its exceptions
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => __exception == null || IceGate.On ? null : __exception;
     }
@@ -110,9 +117,10 @@ namespace Manimal.Icebreaker
     // error dialog on raid load) — same family, same story as MotionEffector/GClass908
     // above: a required field this effector expects isn't set up on our non-standard
     // camera/player rig, throwing every LateUpdate until the raid ends.
-    [HarmonyPatch(typeof(EFT.Animations.BreathEffector), nameof(EFT.Animations.BreathEffector.Process))]
-    internal static class Patch_BreathEffectorNeverThrows
+    [IcebreakerPatchTarget(typeof(EFT.Animations.BreathEffector), nameof(EFT.Animations.BreathEffector.Process))]
+    internal sealed class Patch_BreathEffectorNeverThrows : IcebreakerModulePatch<Patch_BreathEffectorNeverThrows>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => __exception == null || IceGate.On ? null : __exception;
     }
@@ -120,15 +128,17 @@ namespace Manimal.Icebreaker
     // stutter forensics companion: bots path via SYNCHRONOUS NavMesh.CalculatePath on the
     // main thread — several repaths landing in one frame on a big navmesh is the classic
     // unattributed 30-60ms hitch. count + time every call so spike lines can name it.
-    [HarmonyPatch(typeof(UnityEngine.AI.NavMesh), nameof(UnityEngine.AI.NavMesh.CalculatePath),
+    [IcebreakerPatchTarget(typeof(UnityEngine.AI.NavMesh), nameof(UnityEngine.AI.NavMesh.CalculatePath),
         typeof(Vector3), typeof(Vector3), typeof(int), typeof(UnityEngine.AI.NavMeshPath))]
-    internal static class Patch_NavPathTiming
+    internal sealed class Patch_NavPathTiming : IcebreakerModulePatch<Patch_NavPathTiming>
     {
+        [PatchPrefix]
         private static void Prefix(out long __state)
         {
             __state = System.Diagnostics.Stopwatch.GetTimestamp();
         }
 
+        [PatchPostfix]
         private static void Postfix(long __state)
         {
             RenderEnvProbe.NavCalls++;
@@ -142,9 +152,11 @@ namespace Manimal.Icebreaker
     // forever (the infinite impact/gun-loop bug) and it aborts whatever caller flow was
     // mid-sound (bot death drops left guns floating). degrade to -1 = unoccluded, same
     // as BSG's own EOcclusionTest.None path. inert unless the original actually threw.
-    [HarmonyPatch]
-    internal static class Patch_OcclusionNeverThrows
+    [IcebreakerPatchTarget]
+    internal sealed class Patch_OcclusionNeverThrows : IcebreakerModulePatch<Patch_OcclusionNeverThrows>
     {
+        internal Patch_OcclusionNeverThrows(MethodBase target) : base(target) { }
+
         private static int _logged;
 
         private static IEnumerable<MethodBase> TargetMethods()
@@ -153,6 +165,7 @@ namespace Manimal.Icebreaker
                 .AsValueEnumerable().Where(m => m.Name == "ProcessSourceOcclusion").ToArray();
         }
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, ref int __result)
         {
             if (__exception == null) return null;
@@ -169,9 +182,11 @@ namespace Manimal.Icebreaker
     // gain staging — result "really quiet" doors. boost the volume arg for IB_metal_*
     // clips (clamped at 1.0 — the normalized wavs in the next bundle carry the rest).
     // keeps the diagnostic log so the pipeline stays observable.
-    [HarmonyPatch]
-    internal static class Patch_DoorSoundBoost
+    [IcebreakerPatchTarget]
+    internal sealed class Patch_DoorSoundBoost : IcebreakerModulePatch<Patch_DoorSoundBoost>
     {
+        internal Patch_DoorSoundBoost(MethodBase target) : base(target) { }
+
         private static IEnumerable<MethodBase> TargetMethods()
         {
             return typeof(BetterAudio).GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -184,6 +199,7 @@ namespace Manimal.Icebreaker
                 }).ToArray();
         }
 
+        [PatchPrefix]
         private static void Prefix(AudioClip __1, ref float __4)
         {
             if (__1 == null || !__1.name.StartsWith("IB_metal", StringComparison.OrdinalIgnoreCase)) return;
@@ -195,9 +211,10 @@ namespace Manimal.Icebreaker
         // prefix above is the part that still earns its keep.
     }
 
-    [HarmonyPatch(typeof(WindowBreakerManager), "GenerateStuckPieces")]
-    internal static class Patch_WindowBreakerPrewarm
+    [IcebreakerPatchTarget(typeof(WindowBreakerManager), "GenerateStuckPieces")]
+    internal sealed class Patch_WindowBreakerPrewarm : IcebreakerModulePatch<Patch_WindowBreakerPrewarm>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, WindowBreakerManager __instance)
         {
             if (__exception == null) return null;
@@ -218,9 +235,10 @@ namespace Manimal.Icebreaker
     // SpawnPointMarkers' categories. a marker in that list with a null SpawnPoint NREs the
     // whole raid init here. HasPmcBotSpawns only matters for bot-PMC spawning (off for our
     // walkable milestone; our player spawns are zone-less Player points), so swallow it.
-    [HarmonyPatch(typeof(EFT.Game.Spawning.SpawnPointsCollection), "CalculateCanSpawnPmcBots")]
-    internal static class Patch_SpawnPmcScan
+    [IcebreakerPatchTarget(typeof(EFT.Game.Spawning.SpawnPointsCollection), "CalculateCanSpawnPmcBots")]
+    internal sealed class Patch_SpawnPmcScan : IcebreakerModulePatch<Patch_SpawnPmcScan>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -236,8 +254,8 @@ namespace Manimal.Icebreaker
     // the FULL retail hierarchy (manager -> TriggerGroup -> 51 IndoorTriggers from the
     // recovered sidecar transforms) so indoor/outdoor switching actually works — footstep
     // banks, exposure, rain muffling. fallback: the old bare manager (always Outdoor).
-    [HarmonyPatch(typeof(LocalPlayer), "Create")]
-    internal static class Patch_EnsureEnvironmentManager
+    [IcebreakerPatchTarget(typeof(LocalPlayer), "Create")]
+    internal sealed class Patch_EnsureEnvironmentManager : IcebreakerModulePatch<Patch_EnsureEnvironmentManager>
     {
         // ALSO re-anchored onto FikaPlayer.Create by IcebreakerFikaCompat: fika's player
         // never goes through LocalPlayer.Create, so this prefix alone left coop raids
@@ -275,6 +293,7 @@ namespace Manimal.Icebreaker
             Plugin.Log.LogWarning("[RaidFix] created missing EnvironmentManager singleton (bare — no indoor triggers)");
         }
 
+        [PatchPrefix]
         private static void Prefix() => EnsureEnvAndWeather();
     }
 
@@ -284,10 +303,10 @@ namespace Manimal.Icebreaker
     // whack-a-mole. every one of them funnels through Player.Init, which is also
     // exactly where EnvironmentManager gets dereferenced — and the ensure is
     // idempotent, so running it per-player (bots included) costs one null check.
-    [HarmonyPatch(typeof(Player), nameof(Player.Init))]
-    internal static class Patch_EnsureEnvBeforeAnyPlayerInit
+    [IcebreakerPatchTarget(typeof(Player), nameof(Player.Init))]
+    internal sealed class Patch_EnsureEnvBeforeAnyPlayerInit : IcebreakerModulePatch<Patch_EnsureEnvBeforeAnyPlayerInit>
     {
-        [HarmonyPrefix]
+        [PatchPrefix]
         private static void Prefix() => Patch_EnsureEnvironmentManager.EnsureEnvAndWeather();
     }
 
@@ -295,9 +314,10 @@ namespace Manimal.Icebreaker
     // only (retail it's always frozen; the global SPT overrideSeason stays untouched so
     // every other map keeps whatever season the server rolled). Winter is what flips
     // RainController into its snow states, so server rain values fall as snow.
-    [HarmonyPatch(typeof(SeasonsController), nameof(SeasonsController.Run))]
-    internal static class Patch_ForceWinterSeason
+    [IcebreakerPatchTarget(typeof(SeasonsController), nameof(SeasonsController.Run))]
+    internal sealed class Patch_ForceWinterSeason : IcebreakerModulePatch<Patch_ForceWinterSeason>
     {
+        [PatchPrefix]
         private static void Prefix(ref ESeason season)
         {
             // pointless without the weather stack (no WeatherController -> seasons no-op)
@@ -316,7 +336,8 @@ namespace Manimal.Icebreaker
     // renders black with HUD burn-in. so don't fingerprint — gate on the map: if an
     // Icebreaker scene is loaded, discard the scene settings entirely, which makes
     // SetCameraFromPrefab fall back to the game's own built-in "Cam2" from InGameResources.
-    internal sealed class Patch_RejectShellCameraPrefab : SPT.Reflection.Patching.ModulePatch
+    [IcebreakerPatchScope(IcebreakerPatchScope.Bootstrap)]
+    internal sealed class Patch_RejectShellCameraPrefab : IcebreakerModulePatch<Patch_RejectShellCameraPrefab>
     {
         protected override MethodBase GetTargetMethod()
             => AccessTools.Method(typeof(EFT.CameraControl.CameraManager), "SetCameraFromSettings",
@@ -360,10 +381,10 @@ namespace Manimal.Icebreaker
     // Awake reads it. OnEnable re-calls Awake, so this prefix fires more than once;
     // the null check makes the second and later passes free. flashbang blindness is
     // gameplay, which is why this is healed rather than dropped like the ref-dead trio.
-    [HarmonyPatch(typeof(GrenadeFlashScreenEffect), "Awake")]
-    internal static class Patch_GrenadeFlashPrismRef
+    [IcebreakerPatchTarget(typeof(GrenadeFlashScreenEffect), "Awake")]
+    internal sealed class Patch_GrenadeFlashPrismRef : IcebreakerModulePatch<Patch_GrenadeFlashPrismRef>
     {
-        [HarmonyPrefix]
+        [PatchPrefix]
         private static void Prefix(GrenadeFlashScreenEffect __instance)
         {
             if (!IceGate.On) return; // real maps ship a real ref — never touch it
@@ -387,9 +408,10 @@ namespace Manimal.Icebreaker
     // prefab so the fallback path never runs — we're the first to hit it. give the camera
     // the missing component before EffectsController.Awake needs it; method_3 immediately
     // disables it anyway. FrostbiteEffect.Awake only caches a component ref, safe to add.
-    [HarmonyPatch(typeof(EffectsController), "Awake")]
-    internal static class Patch_EffectsControllerFrostbite
+    [IcebreakerPatchTarget(typeof(EffectsController), "Awake")]
+    internal sealed class Patch_EffectsControllerFrostbite : IcebreakerModulePatch<Patch_EffectsControllerFrostbite>
     {
+        [PatchPrefix]
         private static void Prefix(EffectsController __instance)
         {
             if (!FikaBridge.CanRender) return;
@@ -494,9 +516,10 @@ namespace Manimal.Icebreaker
     // blizzard cloudiness pins the CC_Sharpen WeatherDesaturate post effect to max —
     // the gray/muted look the moment Blizzard turns on. method_13 is the per-tick
     // writer; land after it so the config wins the frame. -1 = hands off.
-    [HarmonyPatch(typeof(EFT.Weather.WeatherController), "ControlDesaturateEffect")]
-    internal static class Patch_WeatherDesatOverride
+    [IcebreakerPatchTarget(typeof(EFT.Weather.WeatherController), "ControlDesaturateEffect")]
+    internal sealed class Patch_WeatherDesatOverride : IcebreakerModulePatch<Patch_WeatherDesatOverride>
     {
+        [PatchPostfix]
         private static void Postfix(EFT.Weather.WeatherController __instance)
         {
             if (!IceGate.On) return; // the desat lever is an icebreaker look control
@@ -507,12 +530,13 @@ namespace Manimal.Icebreaker
         }
     }
 
-    [HarmonyPatch(typeof(EFT.Weather.WeatherController), "method_4")]
-    internal static class Patch_WeatherTickDiag
+    [IcebreakerPatchTarget(typeof(EFT.Weather.WeatherController), "method_4")]
+    internal sealed class Patch_WeatherTickDiag : IcebreakerModulePatch<Patch_WeatherTickDiag>
     {
         private static int _throws;
         private static float _nextLog;
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, EFT.Weather.WeatherController __instance)
         {
             if (__exception == null) return null;
@@ -546,10 +570,11 @@ namespace Manimal.Icebreaker
     // after toggling off (the disabled component cant run its off-transition) — so the
     // guard now also kills the TextureMask overlay, and logs the FULL stack once so the
     // actual null site can be healed instead of muted.
-    [HarmonyPatch(typeof(BSG.CameraEffects.NightVision), "OnPreCull")]
-    internal static class Patch_NightVisionNeverSpams
+    [IcebreakerPatchTarget(typeof(BSG.CameraEffects.NightVision), "OnPreCull")]
+    internal sealed class Patch_NightVisionNeverSpams : IcebreakerModulePatch<Patch_NightVisionNeverSpams>
     {
         private static bool _logged;
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, BSG.CameraEffects.NightVision __instance)
         {
             if (__exception != null && !IceGate.On) return __exception; // Cam2-era gap is icebreaker-only
@@ -580,9 +605,10 @@ namespace Manimal.Icebreaker
     // safety net: if method_3 trips on yet another Cam2-era gap, don't let it kill Awake —
     // the rest of Awake (sharpen bind, event subscriptions) still runs and the camera lives.
     // a partially-initialized effects stack just means some per-frame effect NREs (non-fatal).
-    [HarmonyPatch(typeof(EffectsController), "Init")]
-    internal static class Patch_EffectsControllerInit
+    [IcebreakerPatchTarget(typeof(EffectsController), "Init")]
+    internal sealed class Patch_EffectsControllerInit : IcebreakerModulePatch<Patch_EffectsControllerInit>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -594,9 +620,10 @@ namespace Manimal.Icebreaker
 
     // ground truth for the black screen: log exactly what the final camera carries the
     // moment it's set, so the next debugging round reads facts instead of theories.
-    [HarmonyPatch(typeof(EFT.CameraControl.CameraManager), "SetCamera", typeof(Camera))]
-    internal static class Patch_LogCameraInventory
+    [IcebreakerPatchTarget(typeof(EFT.CameraControl.CameraManager), "SetCamera", typeof(Camera))]
+    internal sealed class Patch_LogCameraInventory : IcebreakerModulePatch<Patch_LogCameraInventory>
     {
+        [PatchPostfix]
         private static void Postfix(Camera camera)
         {
             if (!FikaBridge.CanRender) return;
@@ -627,6 +654,80 @@ namespace Manimal.Icebreaker
         internal static Camera CameraRef;
 
         private void Awake() { Instance = this; }
+
+        internal static void DestroyGlobal()
+        {
+            var probe = Instance;
+            Instance = null;
+            CameraRef = null;
+            if (probe != null)
+            {
+                probe.enabled = false;
+                probe.StopAllCoroutines();
+                UnityEngine.Object.Destroy(probe.gameObject);
+            }
+            ReleaseRaidCaches();
+        }
+
+        private static void ReleaseRaidCaches()
+        {
+            // Static references survive component destruction and scene unload.
+            _pcVols.Clear();
+            _pcIndices.Clear();
+            _pcPending.Clear();
+            _pcPending.TrimExcess();
+            _pcDrainScratch.Clear();
+            _pcGroupPending.Clear();
+            _pcGroupPending.TrimExcess();
+            _pcGroupScratch.Clear();
+            _pcWhitelistCache.Clear();
+            _pcWhitelistCache.TrimExcess();
+            _pcLcRoots = null;
+            _xvols.Clear();
+            _crossForced.Clear();
+            _crossForced.TrimExcess();
+            _distEntries.Clear();
+            _distEntries.TrimExcess();
+            _lightEntries.Clear();
+            _lightEntries.TrimExcess();
+            _lamps.Clear();
+            _lamps.TrimExcess();
+            _rendererPosMap = null;
+            _ourMaterials.Clear();
+            _ourMaterials.TrimExcess();
+            _rebindDone.Clear();
+            _rebindDone.TrimExcess();
+            _aliasPending.Clear();
+            _guardScratch.Clear();
+            _strippedEffects.Clear();
+            _peeled.Clear();
+            _amCachedProfile = null;
+            _amEnabledParam = null;
+            _iceFrames = _autoRebindStage = _volProbeIdx = 0;
+            _pcvCursor = _distCursor = _xcullTick = 0;
+            _rebindRunning = _aliasRetryNeeded = _pcDriverWasOff = false;
+            _camAutopsyDone = false;
+            _mixNextSweep = 0f;
+            _lastLamp = _lastLightCull = _lastAmbient = -1f;
+            _batched = false;
+            _geoMode = 0;
+            CutsceneHold = false;
+            if (_lodBiasOrig >= 0f) { QualitySettings.lodBias = _lodBiasOrig; _lodBiasOrig = -1f; }
+            if (_maxLodOrig >= 0) { QualitySettings.maximumLODLevel = _maxLodOrig; _maxLodOrig = -1; }
+            _qsLogged = false;
+            if (_fsHooked)
+            {
+                Camera.onPreCull -= OnFramePreCull;
+                Camera.onPostRender -= OnFramePostRender;
+                _fsHooked = false;
+            }
+            if (_recStarted)
+            {
+                _recBatches.Dispose(); _recSetPass.Dispose(); _recTris.Dispose();
+                _recVerts.Dispose(); _recShadowCasters.Dispose();
+                _recStarted = false;
+            }
+        }
 
         // the scene now provides its own environment (repaired skybox_night + skybox ambient,
         // baked into the scene file), so NO per-frame forcing here — that would clobber it.
@@ -1644,12 +1745,15 @@ namespace Manimal.Icebreaker
         // Assembly-CSharp, and the scene component binds bsg's. a wrong-twin patch lands
         // silently and gates nothing (the probable reason a player crashed with this gate
         // present). the scene deletion is the real fix; this is best-effort.
-        [HarmonyPatch]
-        internal static class Patch_NativeCullingGate
+        [IcebreakerPatchTarget]
+        internal sealed class Patch_NativeCullingGate : IcebreakerModulePatch<Patch_NativeCullingGate>
         {
+            internal Patch_NativeCullingGate(MethodBase target) : base(target) { }
+
             private static MethodBase TargetMethod() =>
                 HarmonyLib.AccessTools.Method(HarmonyLib.AccessTools.TypeByName("Koenigz.PerfectCulling.EFT.PerfectCullingAdaptiveGrid"), "Awake");
 
+            [PatchPrefix]
             private static bool Prefix(MonoBehaviour __instance)
             {
                 // CRITICAL gate: vanilla maps run their own adaptive grids — suppressing
@@ -1685,9 +1789,11 @@ namespace Manimal.Icebreaker
         // InitializeAutoCulling — which is the code that actually initializes the grid
         // (packed-file load, guid->group resolve, BVH) whenever Instance is non-null.
         // File.Exists gate keeps it ship-safe: config on without the bake = sidecars as usual.
-        [HarmonyPatch]
-        internal static class Patch_GraftNativeGrid
+        [IcebreakerPatchTarget]
+        internal sealed class Patch_GraftNativeGrid : IcebreakerModulePatch<Patch_GraftNativeGrid>
         {
+            internal Patch_GraftNativeGrid(MethodBase target) : base(target) { }
+
             private const string RetailGridHash = "065281ec5449481391979c8269072a13";
 
             private static MethodBase TargetMethod() =>
@@ -1698,6 +1804,7 @@ namespace Manimal.Icebreaker
                     System.Type.GetType("Koenigz.PerfectCulling.EFT.PerfectCullingCrossSceneSampler, Assembly-CSharp"),
                     "InitializeAutoCulling");
 
+            [PatchPrefix]
             private static void Prefix()
             {
                 try
@@ -1997,12 +2104,11 @@ namespace Manimal.Icebreaker
         {
             if (_cullingNeutered) return;
             _cullingNeutered = true;
-            var h = new Harmony("com.manimal.aidatadumper.culling");
             foreach (var name in new[] { "LateUpdate", "OnGUI" })
             {
                 var m = AccessTools.Method(camType, name);
                 if (m != null)
-                    h.Patch(m, prefix: new HarmonyMethod(typeof(RenderEnvProbe), nameof(SkipOriginal)));
+                    IcebreakerPatchLifecycle.RegisterRaid(new EditorCallbackPatch(m));
             }
 
             // PC hides culled renderers via forceRenderingOff — which does NOT affect
@@ -2015,7 +2121,7 @@ namespace Manimal.Icebreaker
             if (toggle != null)
             {
                 _groupRenderersField = groupT.GetField("renderers");
-                h.Patch(toggle, prefix: new HarmonyMethod(typeof(RenderEnvProbe), nameof(ToggleGroupViaEnabled)));
+                IcebreakerPatchLifecycle.RegisterRaid(new BakeGroupTogglePatch(toggle));
                 Plugin.Log.LogDebug("[Culling] BakeGroup.Toggle replaced with renderer.enabled path (static-batching compatible)");
             }
             Plugin.Log.LogDebug("[Culling] editor-only callbacks neutered on PerfectCullingCamera");
@@ -2024,6 +2130,23 @@ namespace Manimal.Icebreaker
         private static bool SkipOriginal() => false;
 
         private static FieldInfo _groupRenderersField;
+
+        private sealed class EditorCallbackPatch : IcebreakerModulePatch<EditorCallbackPatch>
+        {
+            internal EditorCallbackPatch(MethodBase target) : base(target) { }
+
+            [PatchPrefix]
+            private static bool Prefix() => SkipOriginal();
+        }
+
+        private sealed class BakeGroupTogglePatch : IcebreakerModulePatch<BakeGroupTogglePatch>
+        {
+            internal BakeGroupTogglePatch(MethodBase target) : base(target) { }
+
+            [PatchPrefix]
+            private static bool Prefix(object __instance, bool isVisible)
+                => ToggleGroupViaEnabled(__instance, isVisible);
+        }
 
         // PC toggle amortization — the stutter forensics caught cell transitions flipping
         // 65-84k renderer.enabled in ONE frame (65-78ms hitches, THE noticeable stutter).
@@ -2878,9 +3001,12 @@ namespace Manimal.Icebreaker
         // QualitySettings is global state, hand it back
         private void OnDestroy()
         {
-            if (_lodBiasOrig >= 0f) { QualitySettings.lodBias = _lodBiasOrig; _lodBiasOrig = -1f; }
-            if (_maxLodOrig >= 0) { QualitySettings.maximumLODLevel = _maxLodOrig; _maxLodOrig = -1; }
-            _qsLogged = false;
+            // Explicit teardown already released this generation synchronously.
+            // Its deferred OnDestroy must not clear a new raid's caches.
+            if (!ReferenceEquals(Instance, this)) return;
+            Instance = null;
+            CameraRef = null;
+            ReleaseRaidCaches();
         }
 
         private System.Collections.IEnumerator EofMarker()
@@ -3069,18 +3195,21 @@ namespace Manimal.Icebreaker
             }
         }
 
+        private static void OnFramePreCull(Camera camera)
+        {
+            if (Time.frameCount != _fsCamFrame) { _fsCamFrame = Time.frameCount; _fsCamStart = _fsClock.Elapsed.TotalMilliseconds; }
+        }
+
+        private static void OnFramePostRender(Camera camera) => _fsCamEnd = _fsClock.Elapsed.TotalMilliseconds;
+
         private void TickFrameSplit()
         {
             double now = _fsClock.Elapsed.TotalMilliseconds;
             if (!_fsHooked)
             {
-                // static guard — the camera delegates survive across raids
                 _fsHooked = true;
-                Camera.onPreCull += c =>
-                {
-                    if (Time.frameCount != _fsCamFrame) { _fsCamFrame = Time.frameCount; _fsCamStart = _fsClock.Elapsed.TotalMilliseconds; }
-                };
-                Camera.onPostRender += c => _fsCamEnd = _fsClock.Elapsed.TotalMilliseconds;
+                Camera.onPreCull += OnFramePreCull;
+                Camera.onPostRender += OnFramePostRender;
             }
             if (!_eofStarted)
             {
@@ -3781,9 +3910,11 @@ namespace Manimal.Icebreaker
     // NREs. all of them are cosmetic (upscaling, AA, super-sampling, aspect) — swallow the
     // entire family in one multi-target finalizer so the bind pass completes at native res.
     // one finalizer covers every setter; no more discovering them one restart at a time.
-    [HarmonyPatch]
-    internal static class Patch_CameraGraphicsSetters
+    [IcebreakerPatchTarget]
+    internal sealed class Patch_CameraGraphicsSetters : IcebreakerModulePatch<Patch_CameraGraphicsSetters>
     {
+        internal Patch_CameraGraphicsSetters(MethodBase target) : base(target) { }
+
         private static readonly string[] Setters =
         {
             "SetFSR2", "SetFSR3", "SetDLSSPreset", "SetAntiAliasing", "SetSuperSampling", "SetAspectRatio",
@@ -3798,6 +3929,7 @@ namespace Manimal.Icebreaker
             }
         }
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, MethodBase __originalMethod)
         {
             if (__exception != null && !IceGate.On) return __exception;
@@ -3813,13 +3945,14 @@ namespace Manimal.Icebreaker
     // over a null collection and aborts the raid. with no bots, covers are pure dead weight —
     // swallow and leave the graph empty. milestone 2 replaces this data outright via
     // InjectGeneratedCovers (navmesh-generated), so this patch is walkable-only scaffolding.
-    [HarmonyPatch(typeof(AICoversData), "RestoreData")]
-    internal static class Patch_CoversRestore
+    [IcebreakerPatchTarget(typeof(AICoversData), "RestoreData")]
+    internal sealed class Patch_CoversRestore : IcebreakerModulePatch<Patch_CoversRestore>
     {
         // RESURRECTION #5: fill the holders with the RETAIL bake before RestoreData runs —
         // when the fill lands, RestoreData executes clean like on a real map (builds its
         // own cache, resolves ids) and the exception path below never fires. fill failure
         // = the synthesized-generation fallback below takes over unchanged.
+        [PatchPrefix]
         private static void Prefix(AICoversData __instance)
         {
             if (!IceGate.On) return; // vanilla covers restore untouched
@@ -3833,6 +3966,7 @@ namespace Manimal.Icebreaker
             HealAiHolders();
         }
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, AICoversData __instance)
         {
             if (__exception != null && !IceGate.On) return __exception;
@@ -3990,9 +4124,10 @@ namespace Manimal.Icebreaker
 
     // CachePoints runs right after RestoreData and pre-warms the cover-point cache; if
     // RestoreData aborted early the cache internals may be null. cold cache is fine.
-    [HarmonyPatch(typeof(AICoversData), "CachePoints")]
-    internal static class Patch_CoversCache
+    [IcebreakerPatchTarget(typeof(AICoversData), "CachePoints")]
+    internal sealed class Patch_CoversCache : IcebreakerModulePatch<Patch_CoversCache>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -4007,11 +4142,12 @@ namespace Manimal.Icebreaker
     // where no leaf finalizer can catch it. create an empty controller up front (the
     // EnvironmentManager pattern). its Init iterates a Weapons array that may be null on a
     // fresh component, so the finalizer below covers that too.
-    [HarmonyPatch(typeof(BotsController), "Init")]
-    internal static class Patch_EnsureStationaryController
+    [IcebreakerPatchTarget(typeof(BotsController), "Init")]
+    internal sealed class Patch_EnsureStationaryController : IcebreakerModulePatch<Patch_EnsureStationaryController>
     {
         // after Init: CoversData + AIPlaceInfoHolder exist, bots haven't spawned —
         // rebuild BSG's spawn-trigger layer (tier events + group-size BD triggers)
+        [PatchPostfix]
         private static void Postfix(BotsController __instance)
         {
             // EVERYTHING below is icebreaker-only scene repair (flares, shadow split,
@@ -4220,6 +4356,7 @@ namespace Manimal.Icebreaker
             Plugin.Log.LogDebug($"[Keycard] {doors.Length} doors: {wired} with proxies ({linked} Link(s) healed by proximity), {gripped} given swiper grips, {standFixed} stand points set from retail, {orphans} orphan(s){(orphans > 0 ? " — swipe on those will crash" : "")}");
         }
 
+        [PatchPrefix]
         private static void Prefix()
         {
             if (!IceGate.On) return; // audit P0: these repairs must never touch vanilla maps
@@ -4243,9 +4380,10 @@ namespace Manimal.Icebreaker
         }
     }
 
-    [HarmonyPatch(typeof(AIStationaryController), "Init")]
-    internal static class Patch_StationaryInit
+    [IcebreakerPatchTarget(typeof(AIStationaryController), "Init")]
+    internal sealed class Patch_StationaryInit : IcebreakerModulePatch<Patch_StationaryInit>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -4262,9 +4400,10 @@ namespace Manimal.Icebreaker
     // uses the list; every downstream consumer (SpawnPoints, CenterOfSpawnPoints, patrol
     // checks) sees a clean list. try/catch per-entry because destroyed unity objects can
     // throw from property getters.
-    [HarmonyPatch(typeof(BotZone), "Init")]
-    internal static class Patch_BotZonePruneMarkers
+    [IcebreakerPatchTarget(typeof(BotZone), "Init")]
+    internal sealed class Patch_BotZonePruneMarkers : IcebreakerModulePatch<Patch_BotZonePruneMarkers>
     {
+        [PatchPrefix]
         private static void Prefix(BotZone __instance)
         {
             if (!IceGate.On) return; // vanilla zones are healthy — dont touch their lists
@@ -4287,9 +4426,10 @@ namespace Manimal.Icebreaker
 
     // bot door graph refresh — walks doors against the (empty) covers graph. bots-off, so
     // a failed refresh costs nothing.
-    [HarmonyPatch(typeof(BotDoorsController), "RefreshData")]
-    internal static class Patch_BotDoorsRefresh
+    [IcebreakerPatchTarget(typeof(BotDoorsController), "RefreshData")]
+    internal sealed class Patch_BotDoorsRefresh : IcebreakerModulePatch<Patch_BotDoorsRefresh>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -4301,7 +4441,7 @@ namespace Manimal.Icebreaker
 
     // DrakiaXYZ Waypoints postfixes BotsController.Init to link doors into its navmesh
     // graph, and NREs on our map's door/nav state — killing the raid AFTER all of BSG's
-    // own init succeeded. swallow their postfix. can't use [HarmonyPatch]+Prepare for this:
+    // own init succeeded. swallow their postfix. can't use [IcebreakerPatchTarget]+Prepare for this:
     // our plugin loads BEFORE Waypoints (chainloader order), so TypeByName finds nothing at
     // startup. instead this is applied lazily from the BotsController.Init prefix above,
     // when every plugin assembly is guaranteed loaded. bots-off makes door links moot, and
@@ -4313,9 +4453,10 @@ namespace Manimal.Icebreaker
     // escaping Init is swallowed WITH THE CULPRIT NAMED, so an unknown mod's missing-map
     // table degrades that mod's feature instead of killing the raid. vanilla maps keep
     // their exceptions — masking another map's failures is not this mod's business.
-    [HarmonyPatch(typeof(BotsController), "Init")]
-    internal static class Patch_BotsInitFirewall
+    [IcebreakerPatchTarget(typeof(BotsController), "Init")]
+    internal sealed class Patch_BotsInitFirewall : IcebreakerModulePatch<Patch_BotsInitFirewall>
     {
+        [PatchPrefix]
         private static void Prefix()
         {
             RaidFirewall.WrapForeignPostfixes(AccessTools.Method(typeof(BotsController), "Init"));
@@ -4324,6 +4465,7 @@ namespace Manimal.Icebreaker
             RaidFirewall.WrapForeignPostfixes(AccessTools.Method(typeof(BotsGroup), nameof(BotsGroup.IsPlayerEnemy)));
         }
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => RaidFirewall.Swallow(__exception, "BotsController.Init");
     }
@@ -4336,12 +4478,14 @@ namespace Manimal.Icebreaker
     // 'Suburbs' entry — KeyNotFound after spawn, then SAIN/DynamicMaps died in the
     // shrapnel). BSG's own body runs before the postfixes, so swallowing only costs the
     // throwing mod (and any postfix queued after it) their game-start hook on our map.
-    [HarmonyPatch(typeof(GameWorld), "OnGameStarted")]
-    internal static class Patch_GameStartFirewall
+    [IcebreakerPatchTarget(typeof(GameWorld), "OnGameStarted")]
+    internal sealed class Patch_GameStartFirewall : IcebreakerModulePatch<Patch_GameStartFirewall>
     {
+        [PatchPrefix]
         private static void Prefix() => RaidFirewall.WrapForeignPostfixes(
             AccessTools.Method(typeof(GameWorld), "OnGameStarted"));
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => RaidFirewall.Swallow(__exception, "GameWorld.OnGameStarted");
     }
@@ -4361,9 +4505,10 @@ namespace Manimal.Icebreaker
     // same per-postfix airbag we already use elsewhere, so ANY mod throwing on this path
     // loses its own hook instead of costing us the bot. wrapped from the Init prefix
     // (every plugin has patched by then); the finalizer is the backstop for the rest.
-    [HarmonyPatch(typeof(BotsGroup), nameof(BotsGroup.IsPlayerEnemy))]
-    internal static class Patch_GroupEnemyFirewall
+    [IcebreakerPatchTarget(typeof(BotsGroup), nameof(BotsGroup.IsPlayerEnemy))]
+    internal sealed class Patch_GroupEnemyFirewall : IcebreakerModulePatch<Patch_GroupEnemyFirewall>
     {
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => RaidFirewall.Swallow(__exception, "BotsGroup.IsPlayerEnemy");
     }
@@ -4376,11 +4521,12 @@ namespace Manimal.Icebreaker
     // tears the CALLING player system mid-frame: controller flip-outs, interactions
     // stuck in slow stutterstep (08-04 raid, 415 exceptions). the sound is lost;
     // the player's action must not be.
-    [HarmonyPatch(typeof(GlobalEventDispatcher), nameof(GlobalEventDispatcher.PlaySound))]
-    internal static class Patch_PlaySoundAirbag
+    [IcebreakerPatchTarget(typeof(GlobalEventDispatcher), nameof(GlobalEventDispatcher.PlaySound))]
+    internal sealed class Patch_PlaySoundAirbag : IcebreakerModulePatch<Patch_PlaySoundAirbag>
     {
         private static float _lastLog;
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
         {
             if (__exception == null) return null;
@@ -4398,7 +4544,8 @@ namespace Manimal.Icebreaker
     internal static class RaidFirewall
     {
         private const string OwnPrefix = "com.manimal.icebreaker";
-        private static readonly HashSet<System.Reflection.MethodBase> Wrapped = new();
+        private static readonly Dictionary<System.Reflection.MethodBase, ModulePatch> Wrapped =
+            new Dictionary<System.Reflection.MethodBase, ModulePatch>();
 
         // PER-POSTFIX AIRBAG. a postfix that throws aborts every postfix queued after it
         // in the same chain — so one mod's missing-map table would cost innocent mods
@@ -4419,16 +4566,22 @@ namespace Manimal.Icebreaker
             {
                 var info = Harmony.GetPatchInfo(chokePoint);
                 if (info?.Postfixes == null) return;
-                var h = new Harmony(OwnPrefix + ".postfixairbag");
-                var airbag = new HarmonyMethod(AccessTools.Method(typeof(RaidFirewall), nameof(PostfixAirbag)));
                 foreach (var p in info.Postfixes)
                 {
-                    if (p.owner.StartsWith(OwnPrefix, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!Wrapped.Add(p.PatchMethod)) continue;
+                    if (p == null || p.PatchMethod == null ||
+                        (p.owner != null && p.owner.StartsWith(OwnPrefix, StringComparison.OrdinalIgnoreCase))) continue;
                     try
                     {
-                        h.Patch(p.PatchMethod, finalizer: airbag);
-                        Plugin.Log.LogDebug($"[Firewall] airbag on {p.PatchMethod.DeclaringType?.FullName}.{p.PatchMethod.Name} (owner {p.owner})");
+                        bool added = false;
+                        if (!Wrapped.TryGetValue(p.PatchMethod, out var wrapper))
+                        {
+                            wrapper = new ForeignPostfixAirbagPatch(p.PatchMethod);
+                            Wrapped.Add(p.PatchMethod, wrapper);
+                            added = true;
+                        }
+                        IcebreakerPatchLifecycle.RegisterRaid(wrapper);
+                        if (added)
+                            Plugin.Log.LogDebug($"[Firewall] airbag on {p.PatchMethod.DeclaringType?.FullName}.{p.PatchMethod.Name} (owner {p.owner})");
                     }
                     catch (Exception e)
                     {
@@ -4441,6 +4594,15 @@ namespace Manimal.Icebreaker
             {
                 Plugin.Log.LogWarning($"[Firewall] postfix sweep failed on {chokePoint.Name}: {e.Message}");
             }
+        }
+
+        private sealed class ForeignPostfixAirbagPatch : IcebreakerModulePatch<ForeignPostfixAirbagPatch>
+        {
+            internal ForeignPostfixAirbagPatch(MethodBase target) : base(target) { }
+
+            [PatchFinalizer]
+            private static Exception Finalizer(Exception __exception, MethodBase __originalMethod)
+                => PostfixAirbag(__exception, __originalMethod);
         }
 
         private static Exception PostfixAirbag(Exception __exception, System.Reflection.MethodBase __originalMethod)
@@ -4491,9 +4653,17 @@ namespace Manimal.Icebreaker
                 Plugin.Log.LogWarning("[RaidFix] Waypoints DoorLinkPatch found but PatchPostfix missing — layout changed?");
                 return;
             }
-            new Harmony("com.manimal.aidatadumper.raidfix-late").Patch(target,
-                finalizer: new HarmonyMethod(typeof(LateWaypointsPatch), nameof(SwallowFinalizer)));
+            IcebreakerPatchLifecycle.RegisterRaid(new WaypointsPatch(target));
             Plugin.Log.LogDebug("[RaidFix] late-patched Waypoints DoorLinkPatch with finalizer");
+        }
+
+        private sealed class WaypointsPatch : IcebreakerModulePatch<WaypointsPatch>
+        {
+            internal WaypointsPatch(MethodBase target) : base(target) { }
+
+            [PatchFinalizer]
+            private static Exception Finalizer(Exception __exception)
+                => SwallowFinalizer(__exception);
         }
 
         private static bool _stackLogged;
@@ -4523,11 +4693,12 @@ namespace Manimal.Icebreaker
     // quest/event singleton that's a dead shell on our backported map, so every door
     // interaction NREs in WorldInteractiveObject.method_3. the door still opens (the NRE is
     // after the swing); swallow the trigger emit — our map has no quest triggers to fire.
-    [HarmonyPatch(typeof(WorldInteractiveObject), "PushTriggers")]
-    internal static class Patch_DoorTriggerEmit
+    [IcebreakerPatchTarget(typeof(WorldInteractiveObject), "PushTriggers")]
+    internal sealed class Patch_DoorTriggerEmit : IcebreakerModulePatch<Patch_DoorTriggerEmit>
     {
         // vanilla maps have LIVE quest/event trigger singletons — masking their emit
         // exceptions would silently break quests (audit P0 family)
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => __exception == null || IceGate.On ? null : __exception;
     }
@@ -4537,9 +4708,11 @@ namespace Manimal.Icebreaker
     // witness every SUBSYSTEM the chain calls: finalizer-patch the Activate method(s) of
     // every BotOwner property type — the throwing step logs itself before the internal
     // catch eats it. inert on success, exception passes through unchanged.
-    [HarmonyPatch]
-    internal static class Patch_BotActivationWitness
+    [IcebreakerPatchTarget]
+    internal sealed class Patch_BotActivationWitness : IcebreakerModulePatch<Patch_BotActivationWitness>
     {
+        internal Patch_BotActivationWitness(MethodBase target) : base(target) { }
+
         private static IEnumerable<MethodBase> TargetMethods()
         {
             // cover EVERYTHING method_10 calls: Activate() overloads AND the Init/
@@ -4585,6 +4758,7 @@ namespace Manimal.Icebreaker
             }
         }
 
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception, object __instance, MethodBase __originalMethod)
         {
             // diagnostic only, and only ours: a vanilla-map bot throwing here is BSG's
@@ -4603,13 +4777,14 @@ namespace Manimal.Icebreaker
     // and activation continues — one broken subsystem no longer statues the bot.
     // mirrors 0.16.9 method_10 exactly (order matters: BotState=Active lands mid-list
     // where BSG set it).
-    [HarmonyPatch(typeof(BotOwner), "method_10")]
-    internal static class Patch_BotActivationStepwise
+    [IcebreakerPatchTarget(typeof(BotOwner), "method_10")]
+    internal sealed class Patch_BotActivationStepwise : IcebreakerModulePatch<Patch_BotActivationStepwise>
     {
         private static readonly MethodInfo _m2 = AccessTools.Method(typeof(BotOwner), "AfterActivationSubscribe");
         private static readonly MethodInfo _m11 = AccessTools.Method(typeof(BotOwner), "method_11");
         private static readonly FieldInfo _activateTime = AccessTools.Field(typeof(BotOwner), "_activateTime");
 
+        [PatchPrefix]
         private static bool Prefix(BotOwner __instance)
         {
             if (!IceGate.On) return true; // vanilla maps: BSG's original behavior
@@ -4687,9 +4862,10 @@ namespace Manimal.Icebreaker
     // rogue count is retail-authored, not a preference — skip the rescale for our waves
     // (gated by the suffixed BotZone* zone names only our map uses), keep the difficulty
     // and tagged&cursed behavior identical to the original.
-    [HarmonyPatch(typeof(LocalGame), "ModifySettings")]
-    internal static class Patch_WaveSlotsAuthored
+    [IcebreakerPatchTarget(typeof(LocalGame), "ModifySettings")]
+    internal sealed class Patch_WaveSlotsAuthored : IcebreakerModulePatch<Patch_WaveSlotsAuthored>
     {
+        [PatchPrefix]
         private static bool Prefix(WavesSettings wavesSettings, WildSpawnWave[] waves, ref WildSpawnWave[] __result)
         {
             // audit P0: the old gate was a naming-convention heuristic (every wave named
@@ -4720,8 +4896,8 @@ namespace Manimal.Icebreaker
     // our server params say 0 (no baked core ids exist on a backported map) so it arrives
     // null and every path request NREs (GoToPosition derefs StartCorePoint.ConnectionGroupId).
     // safety net: assign the nearest generated core at creation.
-    [HarmonyPatch(typeof(BotOwner), nameof(BotOwner.Create))]
-    internal static class Patch_BotStartCorePoint
+    [IcebreakerPatchTarget(typeof(BotOwner), nameof(BotOwner.Create))]
+    internal sealed class Patch_BotStartCorePoint : IcebreakerModulePatch<Patch_BotStartCorePoint>
     {
         // ModProfiler (08-29 field report, stutters on door-opens/zone entries where
         // bots spawn in a batch): 54ms average PER BOT CREATED. Every single call redid
@@ -4734,6 +4910,13 @@ namespace Manimal.Icebreaker
         private static List<AICorePoint> _cores;
         private static GameWorld _coresWorld;
 
+        internal static void ReleaseRaid()
+        {
+            _cores = null;
+            _coresWorld = null;
+        }
+
+        [PatchPostfix]
         private static void Postfix(BotOwner __result)
         {
             try
@@ -4770,12 +4953,13 @@ namespace Manimal.Icebreaker
     // per-frame and non-fatal — Unity logs and continues — but it spams the log. swallow it;
     // losing one weapon-sway effector is invisible for a walk-around. (finalizer runs every
     // frame but is free when nothing throws.)
-    [HarmonyPatch(typeof(MotionEffector), "FixedTracking")]
-    internal static class Patch_MotionEffectorTick
+    [IcebreakerPatchTarget(typeof(MotionEffector), "FixedTracking")]
+    internal sealed class Patch_MotionEffectorTick : IcebreakerModulePatch<Patch_MotionEffectorTick>
     {
         // silent swallow ONLY on the icebreaker (per-frame, logging would flood);
         // vanilla maps keep their exceptions — this was masking every FixedTracking
         // throw everywhere (audit P0)
+        [PatchFinalizer]
         private static Exception Finalizer(Exception __exception)
             => __exception == null || IceGate.On ? null : __exception;
     }

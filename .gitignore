@@ -32,3 +32,8 @@ icebreaker_visits.json*
 
 # NuGet/dotnet cache a sandboxed dotnet run drops into the repo root (HOME redirected)
 .dotnet-home/
+
+# Local build and verification records
+/*-build-*.log
+/verification-*.log
+/parent-walk-*.log

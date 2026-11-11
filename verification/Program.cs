@@ -11,6 +11,7 @@ using SPTarkov.Server.Core.Models.Spt.Tables;
 try
 {
 if (args.Length != 2 && args.Length != 4) throw new ArgumentException("Usage: verification <SPT install> <built client DLL> [Fika install] [built addon DLL]");
+using (var mergeClient = AssemblyDefinition.ReadAssembly(args[1])) MergeChecks.Run(mergeClient);
 // Reproduce the dictionary contract used by loot mods. Duplicate candidates or
 // distribution keys must fail here instead of dropping all loot at raid load.
 using (var loot = JsonDocument.Parse(File.ReadAllText("icebreaker-server/db/looseLoot.json")))
@@ -114,14 +115,14 @@ if (fika != null)
 int checkedTargets = 0;
 var parameterErrors = new List<string>();
 foreach (var patch in AllTypes(client.MainModule.Types).Concat(addon == null ? Enumerable.Empty<TypeDefinition>() : AllTypes(addon.MainModule.Types)))
-foreach (var attr in patch.CustomAttributes.Where(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch"))
+foreach (var attr in patch.CustomAttributes.Where(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch" || a.AttributeType.Name == "IcebreakerPatchTargetAttribute"))
 {
     var typeArg = attr.ConstructorArguments.FirstOrDefault(a => a.Type.FullName == "System.Type").Value as TypeReference;
     var name = attr.ConstructorArguments.FirstOrDefault(a => a.Type.FullName == "System.String").Value as string;
     if (typeArg == null || name == null || !gameTypes.TryGetValue(typeArg.FullName, out var type)) continue;
     var methodTypes = attr.ConstructorArguments.Where(a => a.Type.FullName == "System.Type[]").Select(a => a.Value).OfType<CustomAttributeArgument[]>().FirstOrDefault();
     var methods = type.Methods.Where(m => m.Name == name).ToList();
-    if (methodTypes != null)
+    if (methodTypes != null && methodTypes.Length > 0)
     {
         var expected = methodTypes.Select(a => ((TypeReference)a.Value).FullName).ToArray();
         methods = methods.Where(m => m.Parameters.Select(p => p.ParameterType.FullName).SequenceEqual(expected)).ToList();
@@ -140,7 +141,7 @@ foreach (var attr in patch.CustomAttributes.Where(a => a.AttributeType.FullName 
     checkedTargets++;
 }
 var cameraSafety = AllTypes(client.MainModule.Types).Single(t => t.Name == "Patch_RejectShellCameraPrefab");
-Check(cameraSafety.BaseType.FullName == "SPT.Reflection.Patching.ModulePatch" &&
+Check((cameraSafety.BaseType.FullName == "SPT.Reflection.Patching.ModulePatch" || cameraSafety.BaseType.Name == "IcebreakerModulePatch`1") &&
       !cameraSafety.CustomAttributes.Any(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch"), "Camera safety uses SPT ModulePatch without duplicate Harmony registration");
 var safetyPrefix = cameraSafety.Methods.Single(m => m.Name == "Prefix");
 Check(safetyPrefix.CustomAttributes.Any(a => a.AttributeType.Name == "PatchPrefixAttribute") &&

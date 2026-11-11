@@ -29,9 +29,20 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 
 ## Changelog
 
-The full changelog (15 entries) is in the [`changelog/`](changelog/) folder, 10 per file (higher number = newer, latest: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). Per-release summaries: [Releases](../../releases).
+The full changelog (16 entries) is in the [`changelog/`](changelog/) folder, 10 per file (higher number = newer, latest: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). Per-release summaries: [Releases](../../releases).
 
 ---
+
+## Current release — zzap v3
+
+SPT 4.1.5+ update merged with upstream **1.2.4 (`cd2e3ad`)**. Client/server version: **3.0.0**; release tag: `zzap-v3`.
+
+- Install the original 1.2.4 release first, then extract `Manimal-Icebreaker-zzap-v3.zip` into SPT. Map bundles and the optional Fika addon are not included.
+- Includes upstream map-scoped patches, failed-load/raid cleanup, Combine encounter/cutscene support, weather, interactions, and CSGas 2.x support.
+- Preserves zzap spawn/performance fixes, SAIN/ORBIT compatibility and the 30-minute engine-room hold failsafe. Adapts zzap-only patches to the new lifecycle and preserves mixed-squad roles when missing profiles are retried.
+- Bounds the new cutscene parent walk to 256 steps and removes retired quest locale entries and releases zzap raid-cache references.
+- Verified: client/server Release builds with zero errors, 246 automated checks, 89 patch targets, and source-linked parent-walk cycle/depth checks. Gameplay and co-op remain untested; builds never auto-install into the game.
+- [Download v3](https://github.com/danyhappy564-cmyk/ManimalIcebreaker-zzap--Bootleg-/releases/tag/zzap-v3). To revert, reinstall original 1.2.4. Returning to v2 also requires its matching original-mod files.
 
 # ManimalIcebreaker (fork)
 
@@ -44,7 +55,7 @@ The full changelog (15 entries) is in the [`changelog/`](changelog/) folder, 10 
 > this fork only adds fixes for performance/crash issues found during actual use.
 > No added features or balance changes.
 
-Current target: **upstream 1.1.0 / SPT 4.1.5**
+Current target: **upstream 1.2.4 / SPT 4.1.5+**
 
 > **1.1.0 sync (09/12).** With the original's 1.1.0 release, the author **published the actual source**
 > for the 1.0.1 server fixes we had reconstructed from the DLL. Our reconstruction was replaced

@@ -1,7 +1,7 @@
 <Project>
   <!-- single source of truth for version + identity, per manimal mod conventions -->
   <PropertyGroup>
-    <ModVersion>1.1.3</ModVersion>
+    <ModVersion>3.0.0</ModVersion>
     <ModGuid>com.manimal.icebreaker</ModGuid>
     <ModUsername>Manimal</ModUsername>
     <ModDisplayName>Icebreaker</ModDisplayName>
@@ -17,7 +17,7 @@
     <SPTServerPath Condition="'$(SPTServerPath)' == ''">$(SPTPath)\SPT_Runtime</SPTServerPath>
     <FikaPath Condition="'$(FikaPath)' == ''">D:\SPT41DevFika</FikaPath>
     <!-- upstream ships this false so a clone never writes into a game install it wasn't
-         told about. This fork builds straight into the install on purpose. -->
-    <DeployToGame Condition="'$(DeployToGame)' == ''">true</DeployToGame>
+         told about. Local builds remain inside the repository; installation is explicit. -->
+    <DeployToGame Condition="'$(DeployToGame)' == ''">false</DeployToGame>
   </PropertyGroup>
 </Project>

@@ -1,3 +1,4 @@
+using SPT.Reflection.Patching;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -40,6 +41,8 @@ namespace Manimal.Icebreaker
         // wave's failure once instead of flooding.
         private static readonly HashSet<BossLocationSpawn> _failLogged = new HashSet<BossLocationSpawn>();
 
+        internal static void ReleaseRaid() => _failLogged.Clear();
+
         private static bool IsWedge(BossLocationSpawn wave) =>
             IceGate.On && wave != null && wave.TriggerId != null && wave.TriggerId.StartsWith("wedges");
 
@@ -55,24 +58,14 @@ namespace Manimal.Icebreaker
             catch (Exception e) { return "unreadable (" + e.GetType().Name + ")"; }
         }
 
-        [HarmonyPatch]
-        internal static class Patch_TrySpawn
+        internal sealed class Patch_TrySpawn : IcebreakerModulePatch<Patch_TrySpawn>
         {
             private static MethodBase Target() => AccessTools.Method(typeof(BotBossSpawn), "TrySpawn");
 
-            // resolved by name; if BSG renames it, skip this patch instead of taking PatchAll down
-            [HarmonyPrepare]
-            private static bool Prepare()
-            {
-                if (Target() != null) return true;
-                Plugin.Log.LogWarning("[WedgeDiag] BotBossSpawn.TrySpawn not found - TrySpawn diagnostic skipped");
-                return false;
-            }
+            protected override MethodBase GetTargetMethod()
+                => Target() ?? throw new MissingMethodException("BotBossSpawn.TrySpawn");
 
-            [HarmonyTargetMethod]
-            private static MethodBase TargetMethod() => Target();
-
-            [HarmonyPostfix]
+            [PatchPostfix]
             private static void Postfix(BossLocationSpawn wave, int followersCount, BotCreationData creationData, bool __result)
             {
                 try
@@ -87,10 +80,10 @@ namespace Manimal.Icebreaker
             }
         }
 
-        [HarmonyPatch(typeof(BotBossSpawn), nameof(BotBossSpawn.SpawnBossAndFollowers))]
-        internal static class Patch_SpawnBossAndFollowers
+        [IcebreakerPatchTarget(typeof(BotBossSpawn), nameof(BotBossSpawn.SpawnBossAndFollowers))]
+        internal sealed class Patch_SpawnBossAndFollowers : IcebreakerModulePatch<Patch_SpawnBossAndFollowers>
         {
-            [HarmonyPostfix]
+            [PatchPostfix]
             private static void Postfix(BossLocationSpawn wave, BotCreationData creationData, int followersCount, Task __result)
             {
                 try

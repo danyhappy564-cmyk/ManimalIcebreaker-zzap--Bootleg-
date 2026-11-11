@@ -29,9 +29,20 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 
 ## 변경 이력
 
-전체 변경 이력 15개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 최신 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). 릴리즈별 요약은 [Releases](../../releases).
+전체 변경 이력 16개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 최신 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). 릴리즈별 요약은 [Releases](../../releases).
 
 ---
+
+## 현재 배포 — zzap v3
+
+원작 **1.2.4 (`cd2e3ad`)**를 병합한 SPT 4.1.5 이상용 업데이트입니다. 플러그인·서버 버전은 **3.0.0**, 릴리즈 태그는 `zzap-v3`입니다.
+
+- 원작 1.2.4를 먼저 설치한 뒤 `Manimal-Icebreaker-zzap-v3.zip`을 SPT 폴더에 덮어쓰십시오. 맵 번들과 Fika 추가 모드는 포함하지 않습니다.
+- 원작의 다른 맵 패치 차단·실패한 로딩 및 종료 정리·Combine 연출·교전·날씨·상호작용·CSGas 2.x 대응을 반영했습니다.
+- zzap의 스폰 보완·성능 개선·SAIN/ORBIT 대응·엔진룸 매복 30분 제한을 유지했습니다. 새 패치 관리에서 빠질 수 있던 전용 패치와 혼합 분대의 프로필 재요청을 보완했습니다.
+- 새 컷신의 부모 탐색은 256단계로 제한했습니다. 삭제된 퀘스트의 한/중 번역 잔재와 레이드 종료 뒤 zzap 캐시 참조도 정리했습니다.
+- 검증: 클라이언트·서버 Release 빌드 오류 0, 자동 검사 246개·패치 대상 89개, 실제 부모 탐색 소스의 순환·깊이 제한 검사 통과. 게임·협동 플레이는 미검증이며 게임 폴더에 자동 설치하지 않습니다.
+- [v3 다운로드](https://github.com/danyhappy564-cmyk/ManimalIcebreaker-zzap--Bootleg-/releases/tag/zzap-v3). 이상하면 원작 1.2.4를 다시 덮어쓰십시오. v2로 돌아갈 때는 원작 파일도 당시 버전으로 함께 되돌려야 합니다.
 
 # ManimalIcebreaker (fork)
 
@@ -44,7 +55,7 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 > 여기서 한 건 실사용 중에 잡힌 성능/크래시 문제를 고쳐서 얹은 것뿐입니다.
 > 기능 추가나 밸런스 변경은 없습니다.
 
-현재 기준: **upstream 1.1.0 / SPT 4.1.5**
+현재 기준: **upstream 1.2.4 / SPT 4.1.5+**
 
 > **1.1.0 동기화 (09/12).** 원작이 1.1.0을 올리면서, 우리가 DLL에서 역으로 복원했던
 > 1.0.1 서버 수정을 **진짜 소스로 공개**했습니다. 그 부분은 우리 복원본을 버리고

@@ -1,6 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using ZLinq;
 using Comfort.Common;
 using EFT;
 using UnityEngine;
@@ -170,7 +170,7 @@ namespace Manimal.Icebreaker
 
                         // The box (or an earlier backstop pass) already raised one of this
                         // family's ids - the wave is on its way, nothing to back up.
-                        if (table.Any(t => IcebreakerAIPlaces.Raised.Contains(t.Item3)))
+                        if (table.AsValueEnumerable().Any(t => IcebreakerAIPlaces.Raised.Contains(t.Item3)))
                         {
                             g.Done = true;
                             continue;
@@ -243,7 +243,7 @@ namespace Manimal.Icebreaker
                 // upstream 1.1.3 caches this; FindObjectsOfType<BotZone> is a full scene
                 // scan and this runs from a 0.5s loop.
                 if (zones == null) zones = IcebreakerCrew.AllBotZones();
-                var zone = zones.FirstOrDefault(z => z != null && z.name == name);
+                var zone = zones.AsValueEnumerable().FirstOrDefault(z => z != null && z.name == name);
                 if (zone == null || zone.SpawnPoints == null) continue;
 
                 var points = new List<Vector3>();
