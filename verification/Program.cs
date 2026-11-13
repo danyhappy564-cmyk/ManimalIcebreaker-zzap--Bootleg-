@@ -155,7 +155,7 @@ checkedTargets++;
 Check(checkedTargets > 30, $"{checkedTargets} client/addon patch targets resolve uniquely");
 
 Check(parameterErrors.Count == 0, "Harmony parameter bindings: " + string.Join("; ", parameterErrors));
-if (fika != null && addon != null) VerifyFika(fika, args[2], args[3], args[1]);
+if (fika != null && addon != null) VerifyFika(fika, args[2], args[3], args[1], args[0]);
 Console.WriteLine("SPT 4.1 migration verification passed.");
 }
 catch (Exception error)
@@ -165,7 +165,7 @@ catch (Exception error)
     Environment.ExitCode = 1;
 }
 
-static void VerifyFika(AssemblyDefinition fika, string install, string addonPath, string clientPath)
+static void VerifyFika(AssemblyDefinition fika, string install, string addonPath, string clientPath, string gameInstall)
 {
     var types = AllTypes(fika.MainModule.Types).ToArray();
     var backend = types.Single(t => t.Name == "FikaBackendUtils");
@@ -188,7 +188,8 @@ static void VerifyFika(AssemblyDefinition fika, string install, string addonPath
         if (name.Name == "0Harmony") return typeof(Harmony).Assembly;
         foreach (var directory in new[] { Path.GetDirectoryName(Path.GetFullPath(addonPath))!,
             Path.Combine(install, "BepInEx", "plugins", "Fika"), Path.Combine(install, "BepInEx", "plugins", "spt"), Path.Combine(install, "BepInEx", "core"),
-            Path.Combine(install, "EscapeFromTarkov_Data", "Managed") })
+            Path.Combine(gameInstall, "BepInEx", "plugins", "spt"), Path.Combine(gameInstall, "BepInEx", "core"),
+            Path.Combine(gameInstall, "EscapeFromTarkov_Data", "Managed") })
         {
             var path = Path.Combine(directory, name.Name + ".dll");
             if (File.Exists(path)) return context.LoadFromAssemblyPath(Path.GetFullPath(path));
@@ -238,7 +239,8 @@ static void VerifyFika(AssemblyDefinition fika, string install, string addonPath
             var instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(patchType);
             if (providedTarget != null) patchType.GetField("target", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(instance, providedTarget);
             var targetMethod = (MethodBase)patchType.GetMethod("GetTargetMethod", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(instance, null)!;
-            Check(targetMethod != null && patchType.BaseType!.FullName == "SPT.Reflection.Patching.ModulePatch" &&
+            Check(targetMethod != null && (patchType.BaseType!.FullName == "SPT.Reflection.Patching.ModulePatch" ||
+                patchType.BaseType.Name == "IcebreakerModulePatch`1") &&
                 !patchType.GetCustomAttributesData().Any(a => a.AttributeType.Name == "HarmonyPatch"), "location SPT wrapper resolves without duplicate registration: " + name);
             foreach (var hook in patchType.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 if (hook.GetCustomAttributesData().Any(a => a.AttributeType.Name is "PatchPrefix" or "PatchPostfix" or "PatchPrefixAttribute" or "PatchPostfixAttribute"))

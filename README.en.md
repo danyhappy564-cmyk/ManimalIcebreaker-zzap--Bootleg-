@@ -29,7 +29,7 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 
 ## Changelog
 
-The full changelog (16 entries) is in the [`changelog/`](changelog/) folder, 10 per file (higher number = newer, latest: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). Per-release summaries: [Releases](../../releases).
+The full changelog (17 entries) is in the [`changelog/`](changelog/) folder, 10 per file (higher number = newer, latest: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). Per-release summaries: [Releases](../../releases).
 
 ---
 
@@ -41,7 +41,7 @@ SPT 4.1.5+ update merged with upstream **1.2.4 (`cd2e3ad`)**. Client/server vers
 - Includes upstream map-scoped patches, failed-load/raid cleanup, Combine encounter/cutscene support, weather, interactions, and CSGas 2.x support.
 - Preserves zzap spawn/performance fixes, SAIN/ORBIT compatibility and the 30-minute engine-room hold failsafe. Adapts zzap-only patches to the new lifecycle and preserves mixed-squad roles when missing profiles are retried.
 - Bounds the new cutscene parent walk to 256 steps and removes retired quest locale entries and releases zzap raid-cache references.
-- Verified: client/server Release builds with zero errors, 246 automated checks, 89 patch targets, and source-linked parent-walk cycle/depth checks. Gameplay and co-op remain untested; builds never auto-install into the game.
+- Verified: 319 checks against the real game and Fika 2.4.6 references. Game-API tests covered entering/exiting Icebreaker → Interchange → Icebreaker → Labs → Lighthouse, plus a Fika solo host re-entering Icebreaker, spawn triggers and chain-door event sending. Direct visual/input testing, two-player synchronization and a real 30-minute ambush wait remain unverified. Builds never auto-install into the game.
 - [Download v3](https://github.com/danyhappy564-cmyk/ManimalIcebreaker-zzap--Bootleg-/releases/tag/zzap-v3). To revert, reinstall original 1.2.4. Returning to v2 also requires its matching original-mod files.
 
 # ManimalIcebreaker (fork)
@@ -116,21 +116,20 @@ dotnet build ManimalIcebreaker.sln
 Paths come from `Directory.Build.props`. The default is `SPTPath = E:\SPT 4.1`;
 override with `-p:SPTPath=...` or an environment variable of the same name.
 
-Building automatically deploys to:
+By default, builds stay in the repository's `bin/` directories and never install into the game.
+Stop the game/server and back up existing files before manually installing the required output:
 
 | Destination | Contents |
 |---|---|
 | `$(SPTPath)\BepInEx\plugins\ManimalIcebreaker\` | Client DLL |
 | `$(SPTPath)\SPT_Runtime\user\mods\ManimalIcebreaker\` | Server DLL + **entire `db/`** + `bundles.json` |
 
-**Note**: server deployment overwrites the entire `db/`. Any JSON edited directly in the installation
-folder will be lost. Conversely, if a `base.json` change in the repository does not appear in-game,
-first check whether the build completed deployment.
+**Note**: replacing the entire `db/` would discard JSON edited in the installation. Preserve user settings, copy only changed files, and compare hashes.
 
 The 2 scene bundles (615MB scenes + preset) are not copied on every build due to their size.
 Place them manually once, or use `package-release.ps1`.
 
-To disable deployment: `-p:DeployToGame=false`.
+The deployment protection is `-p:DeployToGame=false`, which is also the default.
 
 ---
 

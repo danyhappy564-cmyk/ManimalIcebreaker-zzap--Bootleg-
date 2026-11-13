@@ -29,7 +29,7 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 
 ## 변경 이력
 
-전체 변경 이력 16개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 최신 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). 릴리즈별 요약은 [Releases](../../releases).
+전체 변경 이력 17개는 [`changelog/`](changelog/) 폴더에 10개씩 나눠 있습니다 (번호가 클수록 최신, 최신 파일: [`CHANGELOG-002.md`](changelog/CHANGELOG-002.md)). 릴리즈별 요약은 [Releases](../../releases).
 
 ---
 
@@ -41,7 +41,7 @@ This build only **overwrites the original Manimal's Icebreaker Backport** - it d
 - 원작의 다른 맵 패치 차단·실패한 로딩 및 종료 정리·Combine 연출·교전·날씨·상호작용·CSGas 2.x 대응을 반영했습니다.
 - zzap의 스폰 보완·성능 개선·SAIN/ORBIT 대응·엔진룸 매복 30분 제한을 유지했습니다. 새 패치 관리에서 빠질 수 있던 전용 패치와 혼합 분대의 프로필 재요청을 보완했습니다.
 - 새 컷신의 부모 탐색은 256단계로 제한했습니다. 삭제된 퀘스트의 한/중 번역 잔재와 레이드 종료 뒤 zzap 캐시 참조도 정리했습니다.
-- 검증: 클라이언트·서버 Release 빌드 오류 0, 자동 검사 246개·패치 대상 89개, 실제 부모 탐색 소스의 순환·깊이 제한 검사 통과. 게임·협동 플레이는 미검증이며 게임 폴더에 자동 설치하지 않습니다.
+- 검증: 실제 게임·Fika 2.4.6 참조 검사 319개 통과. 게임 API로 쇄빙선→인터체인지→쇄빙선→연구소→등대 레이드 진입·정상 종료, Fika 단독 호스트 쇄빙선 재입장·스폰 트리거·사슬 문 이벤트 전송을 확인했습니다. 화면 직접 조작·2인 동기화·30분 매복 실대기는 미검증입니다. 빌드는 게임에 자동 설치하지 않습니다.
 - [v3 다운로드](https://github.com/danyhappy564-cmyk/ManimalIcebreaker-zzap--Bootleg-/releases/tag/zzap-v3). 이상하면 원작 1.2.4를 다시 덮어쓰십시오. v2로 돌아갈 때는 원작 파일도 당시 버전으로 함께 되돌려야 합니다.
 
 # ManimalIcebreaker (fork)
@@ -116,16 +116,15 @@ dotnet build ManimalIcebreaker.sln
 경로는 `Directory.Build.props`에서 나옵니다. 기본값은 `SPTPath = E:\SPT 4.1`이고,
 `-p:SPTPath=...` 또는 동명의 환경변수로 덮어쓸 수 있습니다.
 
-빌드하면 자동으로 아래에 배포됩니다:
+기본 빌드는 저장소의 `bin/`에만 결과를 만들며 게임에 자동 설치하지 않습니다.
+게임·서버를 종료하고 기존 파일을 백업한 뒤, 필요한 결과만 아래 위치에 수동 설치하십시오:
 
 | 대상 | 내용 |
 |---|---|
 | `$(SPTPath)\BepInEx\plugins\ManimalIcebreaker\` | 클라이언트 dll |
 | `$(SPTPath)\SPT_Runtime\user\mods\ManimalIcebreaker\` | 서버 dll + **`db/` 전체** + `bundles.json` |
 
-**주의**: 서버 쪽은 `db/` 전체를 덮어씁니다. 설치 폴더에서 직접 수정한 json이 있으면
-날아갑니다. 반대로, 레포에서 `base.json`을 고쳤는데 인게임에 반영이 안 된다면 빌드가
-배포까지 갔는지부터 확인하세요.
+**주의**: `db/` 전체를 덮어쓰면 설치 폴더에서 수정한 JSON이 사라집니다. 사용자 설정을 보존하고, 바뀐 파일만 복사한 뒤 해시를 대조하십시오.
 
 씬 번들 2개(615MB scenes + preset)는 용량 때문에 매 빌드 복사 대상이 아닙니다.
 최초 1회 수동 배치하거나 `package-release.ps1`을 쓰세요.
